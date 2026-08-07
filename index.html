@@ -800,7 +800,13 @@ function saveData(d){try{localStorage.setItem('findash_v2',JSON.stringify(d));}c
 // =============================================
 const SUPABASE_URL = 'https://aewsbmlfehzxmttinsyo.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFld3NibWxmZWh6eG10dGluc3lvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxMjk0MjUsImV4cCI6MjEwMTcwNTQyNX0.bf9FxX2_nQjXUUPZduX70Vu8Z7532KUqOuNvmWI9MNM';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+});
 let currentUser = null;
 
 // ── AUTH UI ──
@@ -899,23 +905,32 @@ function setCloudStatus(status, text){
 
 // ── SYNC FROM SUPABASE ──
 async function initSupabaseSync(){
-  if(!currentUser){setCloudStatus('local','Sem sessão');return;}
+  if(!currentUser){
+    const { data: { session } } = await sb.auth.getSession();
+    if(session?.user) currentUser = session.user;
+  }
+  if(!currentUser){
+    setCloudStatus('local','Sem sessão');
+    return;
+  }
   setCloudStatus('syncing','Sincronizando...');
   try{
     const {data,error}=await sb.from('transacoes')
-      .select('*').eq('user_id',currentUser.id).order('data',{ascending:false});
-    if(error) throw error;
-    if(data&&data.length>0){
+      .select('*').order('data',{ascending:false});
+    if(error){
+      console.warn('Erro Supabase select:', error);
+      setCloudStatus('local','Modo Local');
+      return;
+    }
+    if(Array.isArray(data)){
       txs=data.map(d=>({
         id:d.id, tipo:d.tipo, entidade:d.entidade, nome:d.nome,
         valor:parseFloat(d.valor), data:d.data, categoria:d.categoria,
         recorrente:d.recorrente||'unica', pago:!!d.pago
       }));
       nextId=Math.max(0,...txs.map(t=>typeof t.id==='number'?t.id:0))+1;
-    } else {
-      txs=[];nextId=1;
+      saveData(txs);renderAll();setCloudStatus('online','Nuvem OK');
     }
-    saveData(txs);renderAll();setCloudStatus('online','Nuvem OK');
   } catch(err){
     console.warn('Erro Supabase:',err);
     setCloudStatus('local','Modo Local');
@@ -1458,21 +1473,36 @@ async function salvarTx(){
   if(!data){toast('Informe a data!','err');return;}
   if(!isFatura&&!cat){toast('Selecione uma categoria!','err');return;}
   
+  if(!currentUser){
+    const { data: { session } } = await sb.auth.getSession();
+    if(session?.user) currentUser = session.user;
+  }
+  
   const newObj = {tipo:formTipo,entidade:formEnt,nome,valor,data,categoria:cat,recorrente:rec,pago,user_id:currentUser?.id};
   const tempId = nextId++;
-  txs.push({id:tempId, ...newObj});
+  txs.unshift({id:tempId, ...newObj});
   saveData(txs); closeModal(); renderAll();
   toast(`${isFatura?'Fatura':'Transação'} salva — ${R(valor)} ✓`,'ok');
-  if(!currentUser){return;}
+  
+  if(!currentUser){
+    setCloudStatus('local','Salvo local');
+    return;
+  }
+  
   setCloudStatus('syncing','Salvando...');
-  const {data:ins,error}=await sb.from('transacoes').insert([newObj]).select();
-  if(!error&&ins&&ins[0]){
-    const idx=txs.findIndex(t=>t.id===tempId);
-    if(idx!==-1)txs[idx].id=ins[0].id;
-    saveData(txs);
-    setCloudStatus('online','Nuvem OK');
-  } else {
-    console.warn('Erro Supabase:',error);
+  try {
+    const {data:ins,error}=await sb.from('transacoes').insert([newObj]).select();
+    if(error){
+      console.warn('Erro ao salvar no Supabase:', error);
+      setCloudStatus('local','Salvo local');
+    } else if(ins && ins[0]){
+      const idx=txs.findIndex(t=>t.id===tempId);
+      if(idx!==-1)txs[idx].id=ins[0].id;
+      saveData(txs);
+      setCloudStatus('online','Nuvem OK');
+    }
+  } catch(e){
+    console.warn('Erro Supabase:', e);
     setCloudStatus('local','Salvo local');
   }
 }
@@ -1591,28 +1621,40 @@ function renderAll(){
 // =============================================
 // INIT
 // =============================================
-window.addEventListener('DOMContentLoaded',()=>{
+async function checkAuthAndInit(){
   updatePeriodLabel();
   renderAll();
-  // Escuta mudanças de sessão (login / logout / refresh)
-  sb.auth.onAuthStateChange(async (event, session)=>{
-    if(session&&session.user){
+  
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if(session && session.user){
       showApp(session.user);
       await initSupabaseSync();
     } else {
-      currentUser=null;
-      document.getElementById('auth-screen').style.display='flex';
-      txs=[];nextId=1;saveData([]);renderAll();
+      currentUser = null;
+      document.getElementById('auth-screen').style.display = 'flex';
     }
-  });
-  // Checa se já há uma sessão ativa
-  sb.auth.getSession().then(({data:{session}})=>{
-    if(session&&session.user){
+  } catch(err){
+    console.warn('Erro ao verificar sessão inicial:', err);
+    document.getElementById('auth-screen').style.display = 'flex';
+  }
+  
+  sb.auth.onAuthStateChange(async (event, session)=>{
+    if((event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') && session?.user){
       showApp(session.user);
-      initSupabaseSync();
+      await initSupabaseSync();
+    } else if(event === 'SIGNED_OUT'){
+      currentUser = null;
+      document.getElementById('auth-screen').style.display = 'flex';
+      txs = [];
+      nextId = 1;
+      saveData([]);
+      renderAll();
     }
   });
-});
+}
+
+window.addEventListener('DOMContentLoaded', checkAuthAndInit);
 document.addEventListener('keydown',e=>{
   if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName))return;
   if(e.key==='n'&&!e.ctrlKey&&!e.metaKey)openModal();
