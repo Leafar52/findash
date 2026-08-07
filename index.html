@@ -838,16 +838,39 @@ async function authSubmit(){
   btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Aguarde...';
   document.getElementById('auth-error').style.display='none';
   document.getElementById('auth-success').style.display='none';
-  if(authMode==='login'){
-    const {error}=await sb.auth.signInWithPassword({email,password});
-    if(error){showAuthError(error.message==='Invalid login credentials'?'E-mail ou senha incorretos.':error.message);}
-  } else {
-    const {error}=await sb.auth.signUp({email,password});
-    if(error){showAuthError(error.message);}
-    else{showAuthSuccess('Conta criada! Verifique seu e-mail para confirmar o cadastro, depois entre.');}
+  try {
+    if(authMode==='login'){
+      const {data,error}=await sb.auth.signInWithPassword({email,password});
+      if(error){
+        if(error.message==='Invalid login credentials'){
+          showAuthError('E-mail ou senha incorretos. Verifique se o e-mail digitado está correto.');
+        } else if(error.message.includes('Email not confirmed')){
+          showAuthError('E-mail ainda não confirmado. Desative a confirmação no Supabase ou confirme pelo link do e-mail.');
+        } else {
+          showAuthError(error.message);
+        }
+      } else if(data&&data.user){
+        showApp(data.user);
+        await initSupabaseSync();
+      }
+    } else {
+      const {data,error}=await sb.auth.signUp({email,password});
+      if(error){
+        showAuthError(error.message);
+      } else if(data&&data.session&&data.user){
+        showApp(data.user);
+        await initSupabaseSync();
+        toast('Conta criada com sucesso! Bem-vindo.','ok');
+      } else {
+        showAuthSuccess('Conta criada! Se você ativou confirmação de e-mail, verifique sua caixa de entrada.');
+      }
+    }
+  } catch(err){
+    showAuthError('Erro ao conectar: ' + err.message);
+  } finally {
+    btn.disabled=false;
+    btn.innerHTML=`<i class="fa-solid fa-arrow-right-to-bracket"></i> <span id="auth-btn-label">${authMode==='login'?'Entrar':'Criar Conta'}</span>`;
   }
-  btn.disabled=false;
-  btn.innerHTML=`<i class="fa-solid fa-arrow-right-to-bracket"></i> <span id="auth-btn-label">${authMode==='login'?'Entrar':'Criar Conta'}</span>`;
 }
 async function authSignOut(){
   await sb.auth.signOut();
