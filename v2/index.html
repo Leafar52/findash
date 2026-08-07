@@ -64,7 +64,14 @@
     .mnav-btn:hover{background:rgba(255,255,255,.08);color:var(--text);}
     .month-lbl{font-size:13px;font-weight:700;color:var(--text);min-width:140px;text-align:center;}
 
-    /* Buttons */
+    /* Buttons & Badges */
+    .cloud-pill{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.05);border:1px solid var(--border-bright);padding:7px 12px;border-radius:20px;font-size:11.5px;font-weight:600;color:var(--text-sec);cursor:pointer;transition:var(--t);user-select:none;}
+    .cloud-pill:hover{background:rgba(255,255,255,.09);color:var(--text);}
+    .cloud-dot{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 8px var(--success);transition:var(--t);}
+    .cloud-pill.syncing .cloud-dot{background:var(--cyan);box-shadow:0 0 8px var(--cyan);animation:pulse 1s infinite alternate;}
+    .cloud-pill.local .cloud-dot{background:var(--warning);box-shadow:0 0 8px var(--warning);}
+    .btn-clean-subtle{background:none;border:none;color:var(--text-muted);font-size:11.5px;font-weight:500;cursor:pointer;padding:4px 8px;border-radius:var(--radius-xs);transition:var(--t);display:inline-flex;align-items:center;gap:5px;font-family:'Inter',sans-serif;}
+    .btn-clean-subtle:hover{color:var(--danger);background:var(--danger-bg);}
     .btn-import{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.06);border:1px solid var(--border-bright);color:var(--text-sec);border-radius:var(--radius-sm);padding:10px 16px;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:var(--t);}
     .btn-import:hover{background:rgba(255,255,255,.1);color:var(--text);}
     .btn-add{display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--primary),var(--primary-dk));color:#fff;border:none;border-radius:var(--radius-sm);padding:11px 20px;font-family:'Inter',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:var(--t);box-shadow:0 4px 18px rgba(123,94,255,.45);flex-shrink:0;}
@@ -504,8 +511,10 @@
     </div>
 
     <div class="topbar-actions">
-      <button class="btn-import" id="btn-cloud-status" style="font-size:11px;padding:8px 12px;cursor:default;" title="Status de Sincronização Supabase"><i class="fa-solid fa-cloud" style="color:var(--cyan)"></i> <span id="cloud-status-text">Conectando...</span></button>
-      <button class="btn-import" onclick="limparDados()" title="Zerar todas as transações de teste" style="border-color:rgba(255,77,106,0.3);color:var(--danger)"><i class="fa-solid fa-trash-can"></i> Zerar</button>
+      <div class="cloud-pill" id="cloud-pill" title="Clique para sincronizar com a Nuvem" onclick="initSupabaseSync()">
+        <span class="cloud-dot"></span>
+        <span id="cloud-status-text">Nuvem OK</span>
+      </div>
       <button class="btn-import" onclick="openImport()"><i class="fa-solid fa-file-import"></i> Importar IA</button>
       <button class="btn-add" onclick="openModal()"><i class="fa-solid fa-plus"></i> Transação</button>
     </div>
@@ -605,8 +614,9 @@
     </div>
 
     <div class="card tx-card">
-      <div class="ch" style="margin-bottom:12px">
+      <div class="ch" style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
         <div><div class="ch-title">Transações</div><div class="ch-sub" id="tx-count">0 transações</div></div>
+        <button class="btn-clean-subtle" onclick="limparDados()" title="Limpar todas as transações"><i class="fa-solid fa-trash-can"></i> Limpar tudo</button>
       </div>
       <div class="search-wrap">
         <i class="fa-solid fa-magnifying-glass"></i>
@@ -704,13 +714,9 @@ let pendingImport = [];
 let cfHoverDay   = -1;
 
 // =============================================
-// DATA PERSISTENCE
+// DATA PERSISTENCE & SUPABASE CLOUD
 // =============================================
 function daysInMonth(y,m){return new Date(y,m+1,0).getDate();}
-
-function buildDefaultData(){
-  return [];
-}
 
 function loadData(){
   try{const s=localStorage.getItem('findash_v2');if(s)return JSON.parse(s);}catch(e){}
@@ -718,99 +724,85 @@ function loadData(){
 }
 function saveData(d){try{localStorage.setItem('findash_v2',JSON.stringify(d));}catch(e){}}
 
-// =============================================
-// SUPABASE CLIENT & CLOUD SYNC
-// =============================================
 const SUPABASE_URL = 'https://aewsbmlfehzxmttinsyo.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFld3NibWxmZWh6eG10dGluc3lvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxMjk0MjUsImV4cCI6MjEwMTcwNTQyNX0.bf9FxX2_nQjXUUPZduX70Vu8Z7532KUqOuNvmWI9MNM';
-let sb = null;
-if (window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY) {
-  try {
-    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  } catch(e) {
-    console.warn('Erro ao inicializar Supabase:', e);
-  }
+
+async function sbFetch(path, options = {}) {
+  const url = `${SUPABASE_URL}/rest/v1/${path}`;
+  const headers = {
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json',
+    'Prefer': options.prefer || 'return=representation',
+    ...(options.headers || {})
+  };
+  return fetch(url, { ...options, headers });
 }
 
 function setCloudStatus(status, text){
-  const el = document.getElementById('cloud-status-text');
-  const btn = document.getElementById('btn-cloud-status');
-  if(!el || !btn) return;
-  if(status === 'online'){
-    btn.style.borderColor = 'rgba(0,229,160,0.35)';
-    btn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up" style="color:var(--success)"></i> <span>${text}</span>`;
-  } else if(status === 'syncing'){
-    btn.style.borderColor = 'rgba(0,207,255,0.35)';
-    btn.innerHTML = `<i class="fa-solid fa-arrows-rotate fa-spin" style="color:var(--cyan)"></i> <span>${text}</span>`;
-  } else {
-    btn.style.borderColor = 'rgba(255,184,0,0.35)';
-    btn.innerHTML = `<i class="fa-solid fa-cloud" style="color:var(--warning)"></i> <span>${text}</span>`;
-  }
+  const pill = document.getElementById('cloud-pill');
+  const txt = document.getElementById('cloud-status-text');
+  if(!pill || !txt) return;
+  txt.textContent = text;
+  pill.className = `cloud-pill ${status}`;
 }
 
 async function initSupabaseSync(){
-  if(!sb){
-    setCloudStatus('local', 'Modo Local');
-    return;
-  }
   setCloudStatus('syncing', 'Sincronizando...');
   try {
-    const { data, error } = await sb.from('transacoes').select('*').order('data', { ascending: false });
-    if(error){
-      console.warn('Supabase fetch error:', error);
-      setCloudStatus('local', 'Modo Local');
-      return;
-    }
-    if(data && data.length > 0){
-      txs = data.map(d => ({
-        id: d.id,
-        tipo: d.tipo,
-        entidade: d.entidade,
-        nome: d.nome,
-        valor: parseFloat(d.valor),
-        data: d.data,
-        categoria: d.categoria,
-        recorrente: d.recorrente || 'unica',
-        pago: !!d.pago
-      }));
-      nextId = Math.max(0, ...txs.map(t => typeof t.id === 'number' ? t.id : 0)) + 1;
+    const res = await sbFetch('transacoes?select=*&order=data.desc', {
+      prefer: 'count=none'
+    });
+    if(!res.ok) throw new Error('Status HTTP ' + res.status);
+    const data = await res.json();
+    if(Array.isArray(data)){
+      if(data.length > 0){
+        txs = data.map(d => ({
+          id: d.id,
+          tipo: d.tipo,
+          entidade: d.entidade,
+          nome: d.nome,
+          valor: parseFloat(d.valor),
+          data: d.data,
+          categoria: d.categoria,
+          recorrente: d.recorrente || 'unica',
+          pago: !!d.pago
+        }));
+        nextId = Math.max(0, ...txs.map(t => typeof t.id === 'number' ? t.id : 0)) + 1;
+      } else {
+        txs = [];
+        nextId = 1;
+      }
       saveData(txs);
       renderAll();
       setCloudStatus('online', 'Nuvem OK');
     } else {
-      txs = [];
-      nextId = 1;
-      saveData([]);
-      renderAll();
-      setCloudStatus('online', 'Nuvem OK');
+      setCloudStatus('local', 'Modo Local');
     }
   } catch(err){
-    console.warn('Erro ao sincronizar com Supabase:', err);
+    console.warn('Erro na conexão com Supabase:', err);
     setCloudStatus('local', 'Modo Local');
   }
 }
 
 async function limparDados(){
-  if(!confirm('Deseja apagar todas as transações e deixar o painel 100% zerado para seus dados reais?')) return;
+  if(!confirm('Deseja apagar todas as transações e deixar o painel 100% zerado?')) return;
   txs = [];
   nextId = 1;
   saveData([]);
   renderAll();
-  if(sb){
-    setCloudStatus('syncing', 'Limpando...');
-    try {
-      const { error } = await sb.from('transacoes').delete().neq('id', -999999);
-      if(error){
-        console.warn('Erro ao limpar Supabase:', error);
-        setCloudStatus('local', 'Erro Nuvem');
-      } else {
-        setCloudStatus('online', 'Nuvem OK');
-      }
-    } catch(e){
-      console.warn('Erro ao limpar Supabase:', e);
+  setCloudStatus('syncing', 'Limpando...');
+  try {
+    const res = await sbFetch('transacoes?id=gte.0', { method: 'DELETE' });
+    if(res.ok){
+      setCloudStatus('online', 'Nuvem OK');
+    } else {
+      setCloudStatus('local', 'Salvo Local');
     }
+  } catch(e){
+    setCloudStatus('local', 'Salvo Local');
   }
-  toast('Painel zerado com sucesso! Pronto para cadastrar seus dados.', 'ok');
+  toast('Painel zerado com sucesso!', 'ok');
 }
 
 let txs=loadData();
@@ -1254,10 +1246,17 @@ async function togglePago(id,e){
   t.pago=!t.pago;
   saveData(txs); renderAll();
   toast('Status atualizado!','ok');
-  if(sb && typeof id === 'number'){
+  if(typeof id === 'number'){
     setCloudStatus('syncing', 'Atualizando...');
-    const { error } = await sb.from('transacoes').update({ pago: t.pago }).eq('id', id);
-    setCloudStatus(error ? 'local' : 'online', error ? 'Erro Nuvem' : 'Nuvem OK');
+    try {
+      const res = await sbFetch(`transacoes?id=eq.${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ pago: t.pago })
+      });
+      setCloudStatus(res.ok ? 'online' : 'local', res.ok ? 'Nuvem OK' : 'Salvo local');
+    } catch(e){
+      setCloudStatus('local', 'Salvo local');
+    }
   }
 }
 
@@ -1266,10 +1265,16 @@ async function deleteTx(id,e){
   txs=txs.filter(x=>x.id!==id);
   saveData(txs); renderAll();
   toast('Transação excluída','ok');
-  if(sb && typeof id === 'number'){
+  if(typeof id === 'number'){
     setCloudStatus('syncing', 'Excluindo...');
-    const { error } = await sb.from('transacoes').delete().eq('id', id);
-    setCloudStatus(error ? 'local' : 'online', error ? 'Erro Nuvem' : 'Nuvem OK');
+    try {
+      const res = await sbFetch(`transacoes?id=eq.${id}`, {
+        method: 'DELETE'
+      });
+      setCloudStatus(res.ok ? 'online' : 'local', res.ok ? 'Nuvem OK' : 'Salvo local');
+    } catch(e){
+      setCloudStatus('local', 'Salvo local');
+    }
   }
 }
 
@@ -1347,18 +1352,26 @@ async function salvarTx(){
   saveData(txs); closeModal(); renderAll();
   toast(`${isFatura?'Fatura':'Transação'} salva — ${R(valor)} ✓`,'ok');
   
-  if(sb){
-    setCloudStatus('syncing', 'Salvando...');
-    const { data: ins, error } = await sb.from('transacoes').insert([newObj]).select();
-    if(!error && ins && ins[0]){
-      const idx = txs.findIndex(t => t.id === tempId);
-      if(idx !== -1) txs[idx].id = ins[0].id;
-      saveData(txs);
+  setCloudStatus('syncing', 'Salvando...');
+  try {
+    const res = await sbFetch('transacoes', {
+      method: 'POST',
+      body: JSON.stringify(newObj)
+    });
+    if(res.ok){
+      const ins = await res.json();
+      if(ins && ins[0]){
+        const idx = txs.findIndex(t => t.id === tempId);
+        if(idx !== -1) txs[idx].id = ins[0].id;
+        saveData(txs);
+      }
       setCloudStatus('online', 'Nuvem OK');
     } else {
-      console.warn('Erro ao inserir no Supabase:', error);
-      setCloudStatus('online', 'Nuvem OK');
+      setCloudStatus('local', 'Salvo local');
     }
+  } catch(e){
+    console.warn('Erro ao salvar no Supabase:', e);
+    setCloudStatus('local', 'Salvo local');
   }
 }
 
@@ -1443,8 +1456,8 @@ async function confirmImport(){
   toast(`${toImport.length} transaç${toImport.length!==1?'ões':'ão'} importada${toImport.length!==1?'s':''}! ✓`,'ok');
   pendingImport=[];
   
-  if(sb){
-    setCloudStatus('syncing', 'Importando...');
+  setCloudStatus('syncing', 'Importando...');
+  try {
     const payload = toImport.map(t => ({
       nome: t.nome,
       valor: t.valor,
@@ -1455,13 +1468,18 @@ async function confirmImport(){
       recorrente: t.recorrente,
       pago: t.pago
     }));
-    const { data: ins, error } = await sb.from('transacoes').insert(payload).select();
-    if(!error && ins){
+    const res = await sbFetch('transacoes', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    if(res.ok){
       initSupabaseSync();
     } else {
-      console.warn('Erro ao importar para Supabase:', error);
-      setCloudStatus('online', 'Nuvem OK');
+      setCloudStatus('local', 'Salvo local');
     }
+  } catch(e){
+    console.warn('Erro ao importar para Supabase:', e);
+    setCloudStatus('local', 'Salvo local');
   }
 }
 
