@@ -8,6 +8,38 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style id="auth-styles">
+    /* ── AUTH SCREEN ── */
+    #auth-screen{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg);}
+    #auth-screen::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 70% 60% at 20% 20%,rgba(123,94,255,.15) 0%,transparent 55%),radial-gradient(ellipse 55% 45% at 80% 80%,rgba(0,207,255,.1) 0%,transparent 55%);pointer-events:none;}
+    .auth-card{background:rgba(10,20,48,0.82);border:1px solid rgba(255,255,255,.1);border-radius:28px;backdrop-filter:blur(40px) saturate(1.6);-webkit-backdrop-filter:blur(40px) saturate(1.6);padding:44px 40px;width:100%;max-width:420px;box-shadow:0 32px 100px rgba(0,0,0,.75);position:relative;animation:fadeUp .45s ease both;}
+    .auth-logo{display:flex;flex-direction:column;align-items:center;gap:14px;margin-bottom:32px;}
+    .auth-logo-icon{width:62px;height:62px;border-radius:20px;background:linear-gradient(135deg,var(--primary),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:0 0 40px rgba(123,94,255,.5);}
+    .auth-logo-text{font-size:26px;font-weight:900;letter-spacing:-.7px;background:linear-gradient(135deg,#fff 30%,var(--primary-lt));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+    .auth-logo-sub{font-size:12px;color:var(--text-sec);font-weight:500;}
+    .auth-tabs{display:flex;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:14px;padding:4px;gap:4px;margin-bottom:28px;}
+    .auth-tab{flex:1;padding:10px;border:none;background:none;color:var(--text-sec);font-family:'Inter',sans-serif;font-size:13px;font-weight:600;border-radius:10px;cursor:pointer;transition:var(--t);}
+    .auth-tab.active{background:linear-gradient(135deg,var(--primary),var(--primary-dk));color:#fff;box-shadow:0 2px 14px rgba(123,94,255,.4);}
+    .auth-field{margin-bottom:16px;}
+    .auth-label{display:block;font-size:11px;font-weight:600;color:var(--text-sec);margin-bottom:8px;text-transform:uppercase;letter-spacing:.6px;}
+    .auth-input-wrap{position:relative;}
+    .auth-input{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:12px;padding:13px 16px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:var(--t);}
+    .auth-input:focus{border-color:var(--primary);background:rgba(123,94,255,.07);box-shadow:0 0 0 3px rgba(123,94,255,.15);}
+    .auth-input::placeholder{color:var(--text-muted);}
+    .auth-eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:4px;transition:var(--t);}
+    .auth-eye:hover{color:var(--text-sec);}
+    .auth-btn{width:100%;padding:15px;background:linear-gradient(135deg,var(--primary),var(--primary-dk));color:#fff;border:none;border-radius:14px;font-family:'Inter',sans-serif;font-size:14px;font-weight:800;cursor:pointer;transition:var(--t);box-shadow:0 4px 24px rgba(123,94,255,.45);margin-top:6px;display:flex;align-items:center;justify-content:center;gap:9px;}
+    .auth-btn:hover{transform:translateY(-2px);box-shadow:0 8px 36px rgba(123,94,255,.65);}
+    .auth-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+    .auth-error{background:var(--danger-bg);border:1px solid var(--danger-border);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--danger);margin-bottom:14px;display:none;}
+    .auth-success{background:var(--success-bg);border:1px solid var(--success-border);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--success);margin-bottom:14px;display:none;}
+    .auth-footer{text-align:center;font-size:11px;color:var(--text-muted);margin-top:20px;}
+    /* ── USER PROFILE ── */
+    .user-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.05);border:1px solid var(--border-bright);padding:7px 12px 7px 7px;border-radius:20px;font-size:12px;font-weight:600;color:var(--text-sec);cursor:default;}
+    .user-avatar{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;}
+    .btn-logout{background:none;border:none;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;padding:7px 10px;border-radius:var(--radius-xs);transition:var(--t);display:inline-flex;align-items:center;gap:5px;font-family:'Inter',sans-serif;}
+    .btn-logout:hover{color:var(--danger);background:var(--danger-bg);}
+  </style>
   <style>
     :root {
       --bg:#060C18; --bg2:#091526;
@@ -475,6 +507,40 @@
 <!-- CF Tooltip -->
 <div id="cf-tooltip"></div>
 
+<!-- ===== AUTH SCREEN ===== -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">💸</div>
+      <div>
+        <div class="auth-logo-text">FinDash</div>
+        <div class="auth-logo-sub">Gestão financeira para MEI &amp; Autônomos</div>
+      </div>
+    </div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Entrar</button>
+      <button class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')">Criar Conta</button>
+    </div>
+    <div class="auth-error" id="auth-error"></div>
+    <div class="auth-success" id="auth-success"></div>
+    <div class="auth-field">
+      <label class="auth-label">E-mail</label>
+      <input class="auth-input" type="email" id="auth-email" placeholder="seu@email.com" autocomplete="email">
+    </div>
+    <div class="auth-field">
+      <label class="auth-label">Senha</label>
+      <div class="auth-input-wrap">
+        <input class="auth-input" type="password" id="auth-password" placeholder="Mínimo 6 caracteres" autocomplete="current-password" style="padding-right:44px" onkeydown="if(event.key==='Enter')authSubmit()">
+        <button class="auth-eye" onclick="toggleAuthPwd()" tabindex="-1"><i class="fa-solid fa-eye" id="auth-eye-ico"></i></button>
+      </div>
+    </div>
+    <button class="auth-btn" id="auth-submit-btn" onclick="authSubmit()">
+      <i class="fa-solid fa-arrow-right-to-bracket"></i> <span id="auth-btn-label">Entrar</span>
+    </button>
+    <div class="auth-footer">Seus dados financeiros são privados e protegidos.<br>Apenas você pode acessar suas transações.</div>
+  </div>
+</div>
+
 <!-- APP -->
 <div id="app">
   <header class="topbar">
@@ -515,6 +581,11 @@
         <span class="cloud-dot"></span>
         <span id="cloud-status-text">Nuvem OK</span>
       </div>
+      <div class="user-pill" id="user-pill">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <span id="user-email-label" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">...</span>
+      </div>
+      <button class="btn-logout" onclick="authSignOut()" title="Sair da conta"><i class="fa-solid fa-arrow-right-from-bracket"></i> Sair</button>
       <button class="btn-import" onclick="openImport()"><i class="fa-solid fa-file-import"></i> Importar IA</button>
       <button class="btn-add" onclick="openModal()"><i class="fa-solid fa-plus"></i> Transação</button>
     </div>
@@ -724,85 +795,118 @@ function loadData(){
 }
 function saveData(d){try{localStorage.setItem('findash_v2',JSON.stringify(d));}catch(e){}}
 
+// =============================================
+// SUPABASE AUTH & CLOUD
+// =============================================
 const SUPABASE_URL = 'https://aewsbmlfehzxmttinsyo.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFld3NibWxmZWh6eG10dGluc3lvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxMjk0MjUsImV4cCI6MjEwMTcwNTQyNX0.bf9FxX2_nQjXUUPZduX70Vu8Z7532KUqOuNvmWI9MNM';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let currentUser = null;
 
-async function sbFetch(path, options = {}) {
-  const url = `${SUPABASE_URL}/rest/v1/${path}`;
-  const headers = {
-    'apikey': SUPABASE_ANON_KEY,
-    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-    'Content-Type': 'application/json',
-    'Prefer': options.prefer || 'return=representation',
-    ...(options.headers || {})
-  };
-  return fetch(url, { ...options, headers });
+// ── AUTH UI ──
+let authMode = 'login';
+function switchAuthTab(mode){
+  authMode = mode;
+  document.getElementById('tab-login').classList.toggle('active', mode==='login');
+  document.getElementById('tab-signup').classList.toggle('active', mode==='signup');
+  document.getElementById('auth-btn-label').textContent = mode==='login' ? 'Entrar' : 'Criar Conta';
+  document.getElementById('auth-error').style.display='none';
+  document.getElementById('auth-success').style.display='none';
+}
+function toggleAuthPwd(){
+  const inp=document.getElementById('auth-password');
+  const ico=document.getElementById('auth-eye-ico');
+  if(inp.type==='password'){inp.type='text';ico.className='fa-solid fa-eye-slash';}
+  else{inp.type='password';ico.className='fa-solid fa-eye';}
+}
+function showAuthError(msg){
+  const el=document.getElementById('auth-error');
+  el.textContent=msg; el.style.display='block';
+  document.getElementById('auth-success').style.display='none';
+}
+function showAuthSuccess(msg){
+  const el=document.getElementById('auth-success');
+  el.textContent=msg; el.style.display='block';
+  document.getElementById('auth-error').style.display='none';
+}
+async function authSubmit(){
+  const email=document.getElementById('auth-email').value.trim();
+  const password=document.getElementById('auth-password').value;
+  const btn=document.getElementById('auth-submit-btn');
+  if(!email||!password){showAuthError('Preencha e-mail e senha.');return;}
+  btn.disabled=true;
+  btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Aguarde...';
+  document.getElementById('auth-error').style.display='none';
+  document.getElementById('auth-success').style.display='none';
+  if(authMode==='login'){
+    const {error}=await sb.auth.signInWithPassword({email,password});
+    if(error){showAuthError(error.message==='Invalid login credentials'?'E-mail ou senha incorretos.':error.message);}
+  } else {
+    const {error}=await sb.auth.signUp({email,password});
+    if(error){showAuthError(error.message);}
+    else{showAuthSuccess('Conta criada! Verifique seu e-mail para confirmar o cadastro, depois entre.');}
+  }
+  btn.disabled=false;
+  btn.innerHTML=`<i class="fa-solid fa-arrow-right-to-bracket"></i> <span id="auth-btn-label">${authMode==='login'?'Entrar':'Criar Conta'}</span>`;
+}
+async function authSignOut(){
+  await sb.auth.signOut();
+  currentUser=null;
+  txs=[];nextId=1;saveData([]);renderAll();
+  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('auth-email').value='';
+  document.getElementById('auth-password').value='';
+}
+function showApp(user){
+  currentUser=user;
+  document.getElementById('auth-screen').style.display='none';
+  const initial=(user.email||'?')[0].toUpperCase();
+  document.getElementById('user-avatar').textContent=initial;
+  document.getElementById('user-email-label').textContent=user.email||'';
 }
 
+// ── CLOUD STATUS ──
 function setCloudStatus(status, text){
-  const pill = document.getElementById('cloud-pill');
-  const txt = document.getElementById('cloud-status-text');
-  if(!pill || !txt) return;
-  txt.textContent = text;
-  pill.className = `cloud-pill ${status}`;
+  const pill=document.getElementById('cloud-pill');
+  const txt=document.getElementById('cloud-status-text');
+  if(!pill||!txt)return;
+  txt.textContent=text;
+  pill.className=`cloud-pill ${status}`;
 }
 
+// ── SYNC FROM SUPABASE ──
 async function initSupabaseSync(){
-  setCloudStatus('syncing', 'Sincronizando...');
-  try {
-    const res = await sbFetch('transacoes?select=*&order=data.desc', {
-      prefer: 'count=none'
-    });
-    if(!res.ok) throw new Error('Status HTTP ' + res.status);
-    const data = await res.json();
-    if(Array.isArray(data)){
-      if(data.length > 0){
-        txs = data.map(d => ({
-          id: d.id,
-          tipo: d.tipo,
-          entidade: d.entidade,
-          nome: d.nome,
-          valor: parseFloat(d.valor),
-          data: d.data,
-          categoria: d.categoria,
-          recorrente: d.recorrente || 'unica',
-          pago: !!d.pago
-        }));
-        nextId = Math.max(0, ...txs.map(t => typeof t.id === 'number' ? t.id : 0)) + 1;
-      } else {
-        txs = [];
-        nextId = 1;
-      }
-      saveData(txs);
-      renderAll();
-      setCloudStatus('online', 'Nuvem OK');
+  if(!currentUser){setCloudStatus('local','Sem sessão');return;}
+  setCloudStatus('syncing','Sincronizando...');
+  try{
+    const {data,error}=await sb.from('transacoes')
+      .select('*').eq('user_id',currentUser.id).order('data',{ascending:false});
+    if(error) throw error;
+    if(data&&data.length>0){
+      txs=data.map(d=>({
+        id:d.id, tipo:d.tipo, entidade:d.entidade, nome:d.nome,
+        valor:parseFloat(d.valor), data:d.data, categoria:d.categoria,
+        recorrente:d.recorrente||'unica', pago:!!d.pago
+      }));
+      nextId=Math.max(0,...txs.map(t=>typeof t.id==='number'?t.id:0))+1;
     } else {
-      setCloudStatus('local', 'Modo Local');
+      txs=[];nextId=1;
     }
+    saveData(txs);renderAll();setCloudStatus('online','Nuvem OK');
   } catch(err){
-    console.warn('Erro na conexão com Supabase:', err);
-    setCloudStatus('local', 'Modo Local');
+    console.warn('Erro Supabase:',err);
+    setCloudStatus('local','Modo Local');
   }
 }
 
 async function limparDados(){
-  if(!confirm('Deseja apagar todas as transações e deixar o painel 100% zerado?')) return;
-  txs = [];
-  nextId = 1;
-  saveData([]);
-  renderAll();
-  setCloudStatus('syncing', 'Limpando...');
-  try {
-    const res = await sbFetch('transacoes?id=gte.0', { method: 'DELETE' });
-    if(res.ok){
-      setCloudStatus('online', 'Nuvem OK');
-    } else {
-      setCloudStatus('local', 'Salvo Local');
-    }
-  } catch(e){
-    setCloudStatus('local', 'Salvo Local');
-  }
-  toast('Painel zerado com sucesso!', 'ok');
+  if(!confirm('Deseja apagar todas as transações e deixar o painel 100% zerado?'))return;
+  txs=[];nextId=1;saveData([]);renderAll();
+  if(!currentUser){toast('Painel zerado localmente.','ok');return;}
+  setCloudStatus('syncing','Limpando...');
+  const {error}=await sb.from('transacoes').delete().eq('user_id',currentUser.id);
+  setCloudStatus(error?'local':'online',error?'Erro Nuvem':'Nuvem OK');
+  toast('Painel zerado com sucesso!','ok');
 }
 
 let txs=loadData();
@@ -1242,40 +1346,25 @@ function renderTx(){
 async function togglePago(id,e){
   e.stopPropagation();
   const t=txs.find(x=>x.id===id);
-  if(!t) return;
+  if(!t)return;
   t.pago=!t.pago;
-  saveData(txs); renderAll();
+  saveData(txs);renderAll();
   toast('Status atualizado!','ok');
-  if(typeof id === 'number'){
-    setCloudStatus('syncing', 'Atualizando...');
-    try {
-      const res = await sbFetch(`transacoes?id=eq.${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ pago: t.pago })
-      });
-      setCloudStatus(res.ok ? 'online' : 'local', res.ok ? 'Nuvem OK' : 'Salvo local');
-    } catch(e){
-      setCloudStatus('local', 'Salvo local');
-    }
-  }
+  if(!currentUser||typeof id!=='number')return;
+  setCloudStatus('syncing','Atualizando...');
+  const {error}=await sb.from('transacoes').update({pago:t.pago}).eq('id',id).eq('user_id',currentUser.id);
+  setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
 }
 
 async function deleteTx(id,e){
   e.stopPropagation();
   txs=txs.filter(x=>x.id!==id);
-  saveData(txs); renderAll();
+  saveData(txs);renderAll();
   toast('Transação excluída','ok');
-  if(typeof id === 'number'){
-    setCloudStatus('syncing', 'Excluindo...');
-    try {
-      const res = await sbFetch(`transacoes?id=eq.${id}`, {
-        method: 'DELETE'
-      });
-      setCloudStatus(res.ok ? 'online' : 'local', res.ok ? 'Nuvem OK' : 'Salvo local');
-    } catch(e){
-      setCloudStatus('local', 'Salvo local');
-    }
-  }
+  if(!currentUser||typeof id!=='number')return;
+  setCloudStatus('syncing','Excluindo...');
+  const {error}=await sb.from('transacoes').delete().eq('id',id).eq('user_id',currentUser.id);
+  setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
 }
 
 // =============================================
@@ -1346,32 +1435,22 @@ async function salvarTx(){
   if(!data){toast('Informe a data!','err');return;}
   if(!isFatura&&!cat){toast('Selecione uma categoria!','err');return;}
   
-  const newObj = {tipo:formTipo,entidade:formEnt,nome,valor,data,categoria:cat,recorrente:rec,pago};
+  const newObj = {tipo:formTipo,entidade:formEnt,nome,valor,data,categoria:cat,recorrente:rec,pago,user_id:currentUser?.id};
   const tempId = nextId++;
   txs.push({id:tempId, ...newObj});
   saveData(txs); closeModal(); renderAll();
   toast(`${isFatura?'Fatura':'Transação'} salva — ${R(valor)} ✓`,'ok');
-  
-  setCloudStatus('syncing', 'Salvando...');
-  try {
-    const res = await sbFetch('transacoes', {
-      method: 'POST',
-      body: JSON.stringify(newObj)
-    });
-    if(res.ok){
-      const ins = await res.json();
-      if(ins && ins[0]){
-        const idx = txs.findIndex(t => t.id === tempId);
-        if(idx !== -1) txs[idx].id = ins[0].id;
-        saveData(txs);
-      }
-      setCloudStatus('online', 'Nuvem OK');
-    } else {
-      setCloudStatus('local', 'Salvo local');
-    }
-  } catch(e){
-    console.warn('Erro ao salvar no Supabase:', e);
-    setCloudStatus('local', 'Salvo local');
+  if(!currentUser){return;}
+  setCloudStatus('syncing','Salvando...');
+  const {data:ins,error}=await sb.from('transacoes').insert([newObj]).select();
+  if(!error&&ins&&ins[0]){
+    const idx=txs.findIndex(t=>t.id===tempId);
+    if(idx!==-1)txs[idx].id=ins[0].id;
+    saveData(txs);
+    setCloudStatus('online','Nuvem OK');
+  } else {
+    console.warn('Erro Supabase:',error);
+    setCloudStatus('local','Salvo local');
   }
 }
 
@@ -1456,31 +1535,16 @@ async function confirmImport(){
   toast(`${toImport.length} transaç${toImport.length!==1?'ões':'ão'} importada${toImport.length!==1?'s':''}! ✓`,'ok');
   pendingImport=[];
   
-  setCloudStatus('syncing', 'Importando...');
-  try {
-    const payload = toImport.map(t => ({
-      nome: t.nome,
-      valor: t.valor,
-      data: t.data,
-      tipo: t.tipo,
-      entidade: t.entidade,
-      categoria: t.categoria,
-      recorrente: t.recorrente,
-      pago: t.pago
-    }));
-    const res = await sbFetch('transacoes', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    if(res.ok){
-      initSupabaseSync();
-    } else {
-      setCloudStatus('local', 'Salvo local');
-    }
-  } catch(e){
-    console.warn('Erro ao importar para Supabase:', e);
-    setCloudStatus('local', 'Salvo local');
-  }
+  if(!currentUser){return;}
+  setCloudStatus('syncing','Importando...');
+  const payload=toImport.map(t=>({
+    nome:t.nome, valor:t.valor, data:t.data, tipo:t.tipo,
+    entidade:t.entidade, categoria:t.categoria,
+    recorrente:t.recorrente, pago:t.pago, user_id:currentUser.id
+  }));
+  const {error}=await sb.from('transacoes').insert(payload);
+  if(!error){initSupabaseSync();}
+  else{console.warn('Erro import Supabase:',error);setCloudStatus('local','Salvo local');}
 }
 
 // =============================================
@@ -1507,7 +1571,24 @@ function renderAll(){
 window.addEventListener('DOMContentLoaded',()=>{
   updatePeriodLabel();
   renderAll();
-  initSupabaseSync();
+  // Escuta mudanças de sessão (login / logout / refresh)
+  sb.auth.onAuthStateChange(async (event, session)=>{
+    if(session&&session.user){
+      showApp(session.user);
+      await initSupabaseSync();
+    } else {
+      currentUser=null;
+      document.getElementById('auth-screen').style.display='flex';
+      txs=[];nextId=1;saveData([]);renderAll();
+    }
+  });
+  // Checa se já há uma sessão ativa
+  sb.auth.getSession().then(({data:{session}})=>{
+    if(session&&session.user){
+      showApp(session.user);
+      initSupabaseSync();
+    }
+  });
 });
 document.addEventListener('keydown',e=>{
   if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName))return;
