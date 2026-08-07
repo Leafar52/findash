@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Financeiro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#4f46e5',
+                        primary_dark: '#4338ca',
+                        bg_dark: '#0f172a',
+                        card_dark: '#1e293b',
+                        text_light: '#f8fafc',
+                        text_muted: '#94a3b8',
+                        danger: '#ef4444',
+                        warning: '#f59e0b',
+                        success: '#10b981',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            transition: all 0.3s ease;
+        }
+
+        /* Estilo para a barra principal que contém o progresso */
+        .bar-container {
+            position: relative;
+            width: 100%;
+            height: 300px;
+            background-color: #334155;
+            border-radius: 9999px; /* Formato de pílula arredondada */
+            overflow: hidden;
+            display: flex;
+            align-items: flex-end; /* Preenche de baixo para cima */
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        /* A barra interna que representa o valor/tempo */
+        .bar-fill {
+            width: 100%;
+            transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.5s ease;
+            border-radius: 9999px;
+            /* Gradiente base, será sobrescrito via JS baseado no status */
+            background: linear-gradient(to top, #3b82f6, #60a5fa);
+        }
+        
+        /* Tooltip customizado */
+        .custom-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s;
+            position: absolute;
+            bottom: 110%; /* Posiciona acima da barra */
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #1e293b;
+            color: white;
+            text-align: center;
+            padding: 8px 12px;
+            border-radius: 8px;
+            z-index: 10;
+            white-space: nowrap;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid #334155;
+            font-size: 0.875rem;
+        }
+        
+        .bar-wrapper:hover .custom-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* Setinha do tooltip */
+        .custom-tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #1e293b transparent transparent transparent;
+        }
+
+        /* Animação de pulso para contas atrasadas/muito próximas */
+        @keyframes pulse-danger {
+            0%, 100% { box-shadow: 0 0 10px 0px rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 20px 5px rgba(239, 68, 68, 0.7); }
+        }
+        .urgent-pulse {
+            animation: pulse-danger 2s infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans">
+
+    <header class="bg-card_dark border-b border-slate-700 p-4 sticky top-0 z-50">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="bg-primary p-2 rounded-lg">
+                    <i class="fa-solid fa-wallet text-xl"></i>
+                </div>
+                <h1 class="text-2xl font-bold tracking-tight">FinDash</h1>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <div class="text-right hidden md:block">
+                    <p class="text-xs text-text_muted">Total a Pagar (Mês)</p>
+                    <p class="text-xl font-bold text-white" id="header-total-value">R$ 0,00</p>
+                </div>
+                <div class="h-10 w-10 rounded-full bg-slate-600 flex items-center justify-center border-2 border-primary cursor-pointer hover:bg-slate-500 transition">
+                    <i class="fa-regular fa-user"></i>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow container mx-auto p-4 md:p-6 flex flex-col gap-6">
+        
+        <!-- Resumo Rápido -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-card_dark p-5 rounded-xl border border-slate-700 shadow-lg flex items-center gap-4">
+                <div class="bg-blue-500/20 p-3 rounded-full text-blue-400">
+                    <i class="fa-solid fa-file-invoice-dollar text-2xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm text-text_muted">Contas Pendentes</p>
+                    <p class="text-2xl font-bold" id="summary-count">0</p>
+                </div>
+            </div>
+            <div class="bg-card_dark p-5 rounded-xl border border-slate-700 shadow-lg flex items-center gap-4">
+                <div class="bg-warning/20 p-3 rounded-full text-warning">
+                    <i class="fa-solid fa-clock text-2xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm text-text_muted">Vencendo nos próximos 7 dias</p>
+                    <p class="text-2xl font-bold" id="summary-urgent">0</p>
+                </div>
+            </div>
+             <div class="bg-card_dark p-5 rounded-xl border border-slate-700 shadow-lg flex items-center gap-4">
+                <div class="bg-danger/20 p-3 rounded-full text-danger">
+                    <i class="fa-solid fa-triangle-exclamation text-2xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm text-text_muted">Contas Atrasadas</p>
+                    <p class="text-2xl font-bold" id="summary-overdue">0</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-card_dark rounded-2xl border border-slate-700 shadow-xl p-6 flex flex-col flex-grow">
+            
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+                <div>
+                    <h2 class="text-xl font-semibold mb-1">Visão Geral de Contas</h2>
+                    <p class="text-sm text-text_muted" id="view-description">Mostrando o quão próximo está o vencimento de cada conta.</p>
+                </div>
+                
+                <!-- Botão de Alternância (Toggle) -->
+                <div class="bg-slate-800 p-1 rounded-lg inline-flex relative shadow-inner">
+                    <!-- Fundo animado do toggle -->
+                    <div id="toggle-bg" class="absolute inset-y-1 left-1 bg-primary rounded-md transition-all duration-300 w-[calc(50%-4px)]"></div>
+                    
+                    <button id="btn-view-time" class="relative z-10 px-4 py-2 text-sm font-medium rounded-md text-white transition-colors flex items-center gap-2">
+                        <i class="fa-solid fa-hourglass-half"></i> Tempo Restante
+                    </button>
+                    <button id="btn-view-value" class="relative z-10 px-4 py-2 text-sm font-medium rounded-md text-text_muted hover:text-white transition-colors flex items-center gap-2">
+                        <i class="fa-solid fa-chart-column"></i> Valor da Conta
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-grow flex items-end justify-around gap-2 md:gap-6 pt-10 pb-4 relative w-full overflow-x-auto min-h-[350px]" id="chart-container">
+                <!-- As barras serão geradas aqui pelo JavaScript -->
+            </div>
+            
+            <!-- Legenda das Cores -->
+            <div class="mt-6 flex flex-wrap justify-center gap-4 text-xs text-text_muted border-t border-slate-700 pt-4" id="color-legend">
+                <!-- Legenda do modo Tempo (Padrão) -->
+                <div class="flex items-center gap-2 legend-time">
+                    <span class="w-3 h-3 rounded-full bg-blue-500"></span> Confortável (> 15 dias)
+                </div>
+                <div class="flex items-center gap-2 legend-time">
+                    <span class="w-3 h-3 rounded-full bg-yellow-500"></span> Atenção (< 15 dias)
+                </div>
+                <div class="flex items-center gap-2 legend-time">
+                    <span class="w-3 h-3 rounded-full bg-orange-500"></span> Crítico (≤ 3 dias)
+                </div>
+                <div class="flex items-center gap-2 legend-time">
+                    <span class="w-3 h-3 rounded-full bg-red-500"></span> Atrasado
+                </div>
+                
+                <!-- Legenda do modo Valor (Oculta por padrão) -->
+                <div class="hidden items-center gap-2 legend-value text-purple-400 w-full text-center">
+                    <i class="fa-solid fa-info-circle"></i> A altura e a intensidade da cor roxa representam o valor da conta. Contas mais caras são mais altas e escuras.
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // --- DADOS MOCK (Simulando contas a pagar) ---
+        // Vamos usar a data de hoje para calcular os dias restantes de forma dinâmica
+        const hoje = new Date();
+        hoje.setHours(0,0,0,0);
+
+        // Função auxiliar para gerar datas baseadas em dias a partir de hoje
+        function criarData(diasAdicionais) {
+            const data = new Date(hoje);
+            data.setDate(data.getDate() + diasAdicionais);
+            return data;
+        }
+
+        const contas = [
+            { id: 1, nome: "Aluguel", valor: 1500.00, vencimento: criarData(5), icone: "fa-house" },
+            { id: 2, nome: "Luz", valor: 250.50, vencimento: criarData(2), icone: "fa-lightbulb" },
+            { id: 3, nome: "Internet", valor: 120.00, vencimento: criarData(-1), icone: "fa-wifi" }, // Atrasada (-1 dia)
+            { id: 4, nome: "Cartão de Crédito", valor: 3200.00, vencimento: criarData(12), icone: "fa-credit-card" },
+            { id: 5, nome: "Água", valor: 85.00, vencimento: criarData(18), icone: "fa-faucet-drip" },
+            { id: 6, nome: "Mensalidade Escolar", valor: 800.00, vencimento: criarData(25), icone: "fa-school" },
+            { id: 7, nome: "Plano de Saúde", valor: 450.00, vencimento: criarData(8), icone: "fa-notes-medical" },
+            { id: 8, nome: "Seguro Carro", valor: 200.00, vencimento: criarData(30), icone: "fa-car" },
+        ];
+
+        // --- ESTADO DO DASHBOARD ---
+        // currentMode: 'TIME' (padrão) ou 'VALUE'
+        let currentMode = 'TIME'; 
+        
+        // --- PARÂMETROS DE VISUALIZAÇÃO ---
+        // Para o modo TIME: Consideramos 30 dias como o "vazio" (0% da barra) e 0 dias como "cheio" (100%)
+        const MAX_DIAS_PREVISAO = 30; 
+        
+        // Para o modo VALUE: Precisamos encontrar o maior valor para escalar as outras barras
+        const valorMaximo = Math.max(...contas.map(c => c.valor));
+
+        // --- SELETORES DO DOM ---
+        const chartContainer = document.getElementById('chart-container');
+        const btnViewTime = document.getElementById('btn-view-time');
+        const btnViewValue = document.getElementById('btn-view-value');
+        const toggleBg = document.getElementById('toggle-bg');
+        const viewDescription = document.getElementById('view-description');
+        
+        const summaryCount = document.getElementById('summary-count');
+        const summaryUrgent = document.getElementById('summary-urgent');
+        const summaryOverdue = document.getElementById('summary-overdue');
+        const headerTotalValue = document.getElementById('header-total-value');
+        
+        const legendTimeItems = document.querySelectorAll('.legend-time');
+        const legendValueItems = document.querySelectorAll('.legend-value');
+
+        // --- FUNÇÕES UTILITÁRIAS ---
+
+        // Formata moeda para BRL
+        const formatarMoeda = (valor) => {
+            return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+        };
+
+        // Formata data para DD/MM
+        const formatarData = (data) => {
+            return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        };
+
+        // Calcula quantos dias faltam entre hoje e o vencimento
+        const calcularDiasRestantes = (dataVencimento) => {
+            const diffTime = dataVencimento.getTime() - hoje.getTime();
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        };
+
+        // --- FUNÇÕES DE LÓGICA DE RENDERIZAÇÃO ---
+
+        function atualizarResumo() {
+            let total = 0;
+            let urgentes = 0;
+            let atrasadas = 0;
+
+            contas.forEach(conta => {
+                total += conta.valor;
+                const dias = calcularDiasRestantes(conta.vencimento);
+                if (dias < 0) atrasadas++;
+                else if (dias <= 7) urgentes++;
+            });
+
+            summaryCount.innerText = contas.length;
+            summaryUrgent.innerText = urgentes;
+            summaryOverdue.innerText = atrasadas;
+            headerTotalValue.innerText = formatarMoeda(total);
+
+            // Destaca visualmente se houver atrasos
+            if (atrasadas > 0) {
+                summaryOverdue.parentElement.classList.add('border-danger');
+            }
+        }
+
+        // Retorna a cor da barra no modo TEMPO baseada nos dias restantes
+        function getCorTempo(diasRestantes) {
+            if (diasRestantes < 0) {
+                // Atrasado: Vermelho escuro para vermelho claro
+                return 'linear-gradient(to top, #991b1b, #ef4444)'; 
+            } else if (diasRestantes <= 3) {
+                // Crítico (<= 3 dias): Laranja escuro para laranja claro
+                return 'linear-gradient(to top, #c2410c, #f97316)';
+            } else if (diasRestantes <= 15) {
+                // Atenção (<= 15 dias): Amarelo escuro para amarelo claro
+                return 'linear-gradient(to top, #ca8a04, #eab308)';
+            } else {
+                // Confortável (> 15 dias): Azul escuro para azul claro
+                return 'linear-gradient(to top, #1d4ed8, #3b82f6)';
+            }
+        }
+
+        // Retorna a cor da barra no modo VALOR (tom de roxo dependendo da % do maior valor)
+        function getCorValor(porcentagemValor) {
+             // Quanto maior a porcentagem, mais escuro/intenso o roxo
+             // Base: tailwind purple-400 (#c084fc) to purple-600 (#9333ea)
+             if (porcentagemValor > 80) return 'linear-gradient(to top, #7e22ce, #a855f7)'; // Muito caro
+             if (porcentagemValor > 40) return 'linear-gradient(to top, #9333ea, #c084fc)'; // Médio
+             return 'linear-gradient(to top, #a855f7, #d8b4fe)'; // Barato
+        }
+
+        // Cria os elementos do DOM iniciais para as barras
+        function inicializarGrafico() {
+            chartContainer.innerHTML = ''; // Limpa
+
+            // Ordenar por data de vencimento crescente (padrão inicial)
+            contas.sort((a, b) => a.vencimento - b.vencimento);
+
+            contas.forEach((conta, index) => {
+                const diasRestantes = calcularDiasRestantes(conta.vencimento);
+                
+                // Contêiner principal da coluna individual (Wrapper)
+                const wrapper = document.createElement('div');
+                wrapper.className = 'bar-wrapper flex flex-col items-center justify-end w-full max-w-[60px] md:max-w-[80px] h-full relative cursor-pointer group';
+                wrapper.id = `wrapper-${conta.id}`;
+                
+                // Evento de clique na própria barra para alternar o modo
+                wrapper.onclick = () => alternarModo();
+
+                // Tooltip
+                const tooltip = document.createElement('div');
+                tooltip.className = 'custom-tooltip';
+                tooltip.id = `tooltip-${conta.id}`;
+                wrapper.appendChild(tooltip);
+
+                // O container visual da barra (fundo cinza)
+                const barContainer = document.createElement('div');
+                barContainer.className = 'bar-container';
+                if (diasRestantes < 0) {
+                     barContainer.classList.add('urgent-pulse'); // Adiciona pulso se atrasado
+                }
+
+                // O preenchimento da barra (parte colorida animada)
+                const barFill = document.createElement('div');
+                barFill.className = 'bar-fill';
+                barFill.id = `bar-${conta.id}`;
+                // Altura inicial zerada para animação de entrada
+                barFill.style.height = '0%'; 
+                
+                barContainer.appendChild(barFill);
+                wrapper.appendChild(barContainer);
+
+                // Rótulo abaixo da barra (Ícone e Nome)
+                const labelContainer = document.createElement('div');
+                labelContainer.className = 'mt-3 text-center w-full';
+                
+                const icone = document.createElement('i');
+                icone.className = `fa-solid ${conta.icone} text-text_muted mb-1 text-lg group-hover:text-white transition-colors`;
+                
+                const nomeLabel = document.createElement('p');
+                nomeLabel.className = 'text-[10px] md:text-xs text-text_muted truncate w-full px-1';
+                nomeLabel.innerText = conta.nome;
+                nomeLabel.title = conta.nome;
+
+                labelContainer.appendChild(icone);
+                labelContainer.appendChild(nomeLabel);
+                wrapper.appendChild(labelContainer);
+
+                chartContainer.appendChild(wrapper);
+            });
+
+            // Força um pequeno delay para a animação de entrada rodar
+            setTimeout(() => {
+                atualizarVisuais();
+            }, 50);
+        }
+
+        // Atualiza a altura, cor e texto do tooltip das barras dependendo do modo atual
+        function atualizarVisuais() {
+            contas.forEach(conta => {
+                const barFill = document.getElementById(`bar-${conta.id}`);
+                const tooltip = document.getElementById(`tooltip-${conta.id}`);
+                const diasRestantes = calcularDiasRestantes(conta.vencimento);
+                
+                let alturaPorcentagem = 0;
+                let background = '';
+                let tooltipContent = '';
+
+                if (currentMode === 'TIME') {
+                    // MODO TEMPO:
+                    // Se estiver atrasada (< 0), barra fica cheia (100%)
+                    // Se faltarem mais de MAX_DIAS_PREVISAO, barra fica bem vazia (ex: 5%)
+                    // Lógica invertida: Menos dias = Maior a barra (porque a urgência 'enche')
+                    
+                    if (diasRestantes < 0) {
+                        alturaPorcentagem = 100;
+                        tooltipContent = `
+                            <div class="font-bold text-red-400">${conta.nome}</div>
+                            <div class="text-sm mt-1">ATRASADA (${Math.abs(diasRestantes)} dias)</div>
+                            <div class="text-xs text-slate-400 mt-1">Venceu em: ${formatarData(conta.vencimento)}</div>
+                            <div class="font-semibold mt-1">${formatarMoeda(conta.valor)}</div>
+                        `;
+                    } else if (diasRestantes >= MAX_DIAS_PREVISAO) {
+                        alturaPorcentagem = 10; // Mínimo visual
+                    } else {
+                        // Calcula % invertida: 0 dias = 100%, 30 dias = 0%
+                        alturaPorcentagem = 100 - ((diasRestantes / MAX_DIAS_PREVISAO) * 100);
+                        // Garante um mínimo visual para a barra não desaparecer
+                        alturaPorcentagem = Math.max(10, alturaPorcentagem);
+                    }
+
+                    background = getCorTempo(diasRestantes);
+
+                    if(diasRestantes >= 0) {
+                        let textoDias = diasRestantes === 0 ? "Vence HOJE" : `Faltam ${diasRestantes} dia(s)`;
+                        tooltipContent = `
+                            <div class="font-bold text-white">${conta.nome}</div>
+                            <div class="text-sm text-blue-300 mt-1">${textoDias}</div>
+                            <div class="text-xs text-slate-400 mt-1">Data: ${formatarData(conta.vencimento)}</div>
+                            <div class="font-semibold mt-1 opacity-70">${formatarMoeda(conta.valor)}</div>
+                        `;
+                    }
+
+                } else {
+                    // MODO VALOR:
+                    // Altura proporcional ao valor da conta em relação ao maior valor geral
+                    alturaPorcentagem = (conta.valor / valorMaximo) * 100;
+                    // Garante um mínimo para contas muito baratas
+                    alturaPorcentagem = Math.max(5, alturaPorcentagem); 
+                    
+                    background = getCorValor(alturaPorcentagem);
+                    
+                    let statusTempo = diasRestantes < 0 ? 
+                        `<span class="text-red-400">(Atrasada)</span>` : 
+                        `<span class="text-slate-400">(Vence dia ${formatarData(conta.vencimento)})</span>`;
+
+                    tooltipContent = `
+                        <div class="font-bold text-white">${conta.nome}</div>
+                        <div class="text-lg text-purple-300 font-bold mt-1">${formatarMoeda(conta.valor)}</div>
+                        <div class="text-xs mt-1">${statusTempo}</div>
+                    `;
+                }
+
+                // Aplica estilos
+                barFill.style.height = `${alturaPorcentagem}%`;
+                barFill.style.background = background;
+                tooltip.innerHTML = tooltipContent;
+            });
+
+            // Atualiza textos descritivos e legendas
+            if (currentMode === 'TIME') {
+                viewDescription.innerText = "Mostrando o quão próximo está o vencimento. Barras mais cheias vencem mais rápido.";
+                legendTimeItems.forEach(item => item.style.display = 'flex');
+                legendValueItems.forEach(item => item.style.display = 'none');
+            } else {
+                viewDescription.innerText = "Comparando os valores das contas. Barras mais altas representam valores maiores.";
+                legendTimeItems.forEach(item => item.style.display = 'none');
+                legendValueItems.forEach(item => item.style.display = 'flex');
+            }
+        }
+
+        // Lógica de alternância (Toggle)
+        function alternarModo(forceMode = null) {
+            if (forceMode && forceMode === currentMode) return;
+            
+            if (forceMode) {
+                currentMode = forceMode;
+            } else {
+                currentMode = currentMode === 'TIME' ? 'VALUE' : 'TIME';
+            }
+
+            // Animação do botão Toggle UI
+            if (currentMode === 'TIME') {
+                toggleBg.style.left = '4px'; // Posição esquerda
+                btnViewTime.classList.replace('text-text_muted', 'text-white');
+                btnViewValue.classList.replace('text-white', 'text-text_muted');
+            } else {
+                toggleBg.style.left = 'calc(50% + 2px)'; // Posição direita
+                btnViewValue.classList.replace('text-text_muted', 'text-white');
+                btnViewTime.classList.replace('text-white', 'text-text_muted');
+            }
+
+            // Atualiza o gráfico
+            atualizarVisuais();
+        }
+
+        // --- EVENT LISTENERS ---
+        btnViewTime.addEventListener('click', () => alternarModo('TIME'));
+        btnViewValue.addEventListener('click', () => alternarModo('VALUE'));
+
+        // --- INICIALIZAÇÃO DA APLICAÇÃO ---
+        window.addEventListener('DOMContentLoaded', () => {
+            atualizarResumo();
+            inicializarGrafico();
+        });
+
+    </script>
+</body>
+</html>
