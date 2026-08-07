@@ -505,6 +505,7 @@
 
     <div class="topbar-actions">
       <button class="btn-import" id="btn-cloud-status" style="font-size:11px;padding:8px 12px;cursor:default;" title="Status de Sincronização Supabase"><i class="fa-solid fa-cloud" style="color:var(--cyan)"></i> <span id="cloud-status-text">Conectando...</span></button>
+      <button class="btn-import" onclick="limparDados()" title="Zerar todas as transações de teste" style="border-color:rgba(255,77,106,0.3);color:var(--danger)"><i class="fa-solid fa-trash-can"></i> Zerar</button>
       <button class="btn-import" onclick="openImport()"><i class="fa-solid fa-file-import"></i> Importar IA</button>
       <button class="btn-add" onclick="openModal()"><i class="fa-solid fa-plus"></i> Transação</button>
     </div>
@@ -708,41 +709,12 @@ let cfHoverDay   = -1;
 function daysInMonth(y,m){return new Date(y,m+1,0).getDate();}
 
 function buildDefaultData(){
-  const now=new Date(); const y=now.getFullYear();
-  const mo=String(now.getMonth()+1).padStart(2,'0');
-  const d=(day)=>`${y}-${mo}-${String(Math.min(day,daysInMonth(now.getFullYear(),now.getMonth()))).padStart(2,'0')}`;
-  const daysAgo=(n)=>{const dt=new Date(now);dt.setDate(dt.getDate()-n);return dt.toISOString().split('T')[0];};
-  return [
-    {id:1,  tipo:'entrada',          entidade:'CNPJ',nome:'Pró-labore Mensal',        valor:3000,  data:d(5),       categoria:'pro-labore', recorrente:'mensal',pago:true},
-    {id:2,  tipo:'entrada',          entidade:'CNPJ',nome:'Projeto — Branding Startup',valor:2800, data:d(12),      categoria:'servico',    recorrente:'unica', pago:true},
-    {id:3,  tipo:'entrada',          entidade:'CPF', nome:'Freela — Design UI/UX',     valor:950,  data:d(18),      categoria:'freela',     recorrente:'unica', pago:false},
-    {id:4,  tipo:'entrada',          entidade:'CPF', nome:'Consultoria de Marketing',  valor:1200, data:d(22),      categoria:'servico',    recorrente:'unica', pago:false},
-    {id:5,  tipo:'entrada',          entidade:'CNPJ',nome:'Retainer Mensal — StartupX',valor:1500, data:d(28),      categoria:'servico',    recorrente:'mensal',pago:false},
-    {id:6,  tipo:'saida',            entidade:'CPF', nome:'Aluguel Apartamento',       valor:1550, data:d(5),       categoria:'moradia',    recorrente:'mensal',pago:true},
-    {id:7,  tipo:'saida',            entidade:'CPF', nome:'Supermercado',              valor:480,  data:d(10),      categoria:'alimentacao',recorrente:'mensal',pago:true},
-    {id:8,  tipo:'saida',            entidade:'CPF', nome:'Plano de Saúde',            valor:390,  data:d(10),      categoria:'saude',      recorrente:'mensal',pago:true},
-    {id:9,  tipo:'saida',            entidade:'CPF', nome:'Combustível + Uber',        valor:210,  data:d(17),      categoria:'transporte', recorrente:'mensal',pago:false},
-    {id:10, tipo:'saida',            entidade:'CPF', nome:'Academia',                  valor:89,   data:d(1),       categoria:'saude',      recorrente:'mensal',pago:true},
-    {id:11, tipo:'saida',            entidade:'CPF', nome:'Netflix + Spotify',         valor:68,   data:d(8),       categoria:'digital',    recorrente:'mensal',pago:true},
-    {id:12, tipo:'saida',            entidade:'CPF', nome:'Restaurante (lazer)',        valor:142,  data:d(9),       categoria:'alimentacao',recorrente:'unica', pago:true},
-    {id:13, tipo:'saida',            entidade:'CNPJ',nome:'DAS MEI',                   valor:75.90,data:d(20),      categoria:'impostos',   recorrente:'mensal',pago:false},
-    {id:14, tipo:'saida',            entidade:'CNPJ',nome:'Contador',                  valor:280,  data:d(5),       categoria:'contador',   recorrente:'mensal',pago:true},
-    {id:15, tipo:'saida',            entidade:'CNPJ',nome:'Figma Pro',                 valor:89.90,data:d(1),       categoria:'digital',    recorrente:'mensal',pago:true},
-    {id:16, tipo:'saida',            entidade:'CNPJ',nome:'Hostinger — Hospedagem',    valor:45,   data:d(16),      categoria:'digital',    recorrente:'mensal',pago:false},
-    {id:17, tipo:'saida',            entidade:'CNPJ',nome:'Notion + Linear',           valor:52,   data:d(1),       categoria:'digital',    recorrente:'mensal',pago:true},
-    {id:18, tipo:'saida',            entidade:'CNPJ',nome:'Celular/Internet Empresa',  valor:130,  data:d(10),      categoria:'digital',    recorrente:'mensal',pago:true},
-    // Pagamentos de fatura (não contam como saída!)
-    {id:19, tipo:'pagamento-fatura', entidade:'CPF', nome:'Pgto Fatura Nubank',        valor:850,  data:d(7),       categoria:'fatura',     recorrente:'mensal',pago:true},
-    {id:20, tipo:'pagamento-fatura', entidade:'CNPJ',nome:'Pgto Fatura Inter Empresa', valor:320,  data:d(15),      categoria:'fatura',     recorrente:'mensal',pago:false},
-    // Atrasadas
-    {id:21, tipo:'saida',            entidade:'CPF', nome:'Conta de Luz',              valor:185,  data:daysAgo(4), categoria:'moradia',    recorrente:'mensal',pago:false},
-    {id:22, tipo:'saida',            entidade:'CPF', nome:'Internet Residencial',       valor:119,  data:daysAgo(2), categoria:'digital',    recorrente:'mensal',pago:false},
-  ];
+  return [];
 }
 
 function loadData(){
   try{const s=localStorage.getItem('findash_v2');if(s)return JSON.parse(s);}catch(e){}
-  const def=buildDefaultData(); saveData(def); return def;
+  return [];
 }
 function saveData(d){try{localStorage.setItem('findash_v2',JSON.stringify(d));}catch(e){}}
 
@@ -806,42 +778,39 @@ async function initSupabaseSync(){
       renderAll();
       setCloudStatus('online', 'Nuvem OK');
     } else {
-      // Banco na nuvem ainda vazio: popula com os dados iniciais locais
-      if(txs.length > 0){
-        const toInsert = txs.map(t => ({
-          nome: t.nome,
-          valor: t.valor,
-          data: t.data,
-          tipo: t.tipo,
-          entidade: t.entidade,
-          categoria: t.categoria,
-          recorrente: t.recorrente || 'unica',
-          pago: !!t.pago
-        }));
-        const { data: inserted, error: insErr } = await sb.from('transacoes').insert(toInsert).select();
-        if(!insErr && inserted && inserted.length > 0){
-          txs = inserted.map(d => ({
-            id: d.id,
-            tipo: d.tipo,
-            entidade: d.entidade,
-            nome: d.nome,
-            valor: parseFloat(d.valor),
-            data: d.data,
-            categoria: d.categoria,
-            recorrente: d.recorrente || 'unica',
-            pago: !!d.pago
-          }));
-          nextId = Math.max(0, ...txs.map(t => typeof t.id === 'number' ? t.id : 0)) + 1;
-          saveData(txs);
-          renderAll();
-        }
-      }
+      txs = [];
+      nextId = 1;
+      saveData([]);
+      renderAll();
       setCloudStatus('online', 'Nuvem OK');
     }
   } catch(err){
     console.warn('Erro ao sincronizar com Supabase:', err);
     setCloudStatus('local', 'Modo Local');
   }
+}
+
+async function limparDados(){
+  if(!confirm('Deseja apagar todas as transações e deixar o painel 100% zerado para seus dados reais?')) return;
+  txs = [];
+  nextId = 1;
+  saveData([]);
+  renderAll();
+  if(sb){
+    setCloudStatus('syncing', 'Limpando...');
+    try {
+      const { error } = await sb.from('transacoes').delete().neq('id', -999999);
+      if(error){
+        console.warn('Erro ao limpar Supabase:', error);
+        setCloudStatus('local', 'Erro Nuvem');
+      } else {
+        setCloudStatus('online', 'Nuvem OK');
+      }
+    } catch(e){
+      console.warn('Erro ao limpar Supabase:', e);
+    }
+  }
+  toast('Painel zerado com sucesso! Pronto para cadastrar seus dados.', 'ok');
 }
 
 let txs=loadData();
