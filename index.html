@@ -217,6 +217,21 @@
 
     /* ── TRANSACTIONS ── */
     .tx-card{padding:24px;display:flex;flex-direction:column;}
+    /* Tx type filter */
+    .tx-type-filter{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
+    .ttf-btn{background:rgba(255,255,255,.04);border:1px solid var(--border);color:var(--text-sec);font-family:'Inter',sans-serif;font-size:11px;font-weight:600;padding:5px 11px;border-radius:8px;cursor:pointer;transition:var(--t);display:flex;align-items:center;gap:4px;}
+    .ttf-btn:hover{background:rgba(255,255,255,.08);color:var(--text);}
+    .ttf-btn.active{background:rgba(123,94,255,.15);border-color:var(--primary);color:var(--primary-lt);}
+    .ttf-btn.active.ent{background:var(--success-bg);border-color:var(--success-border);color:var(--success);}
+    .ttf-btn.active.sai{background:var(--danger-bg);border-color:var(--danger-border);color:var(--danger);}
+    .ttf-btn.active.fat{background:var(--transfer-bg);border-color:var(--transfer-border);color:var(--transfer);}
+    /* Tx totals bar */
+    .tx-totals{display:flex;gap:12px;padding:9px 12px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:9px;margin-bottom:10px;flex-wrap:wrap;}
+    .tx-total-item{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;}
+    .tx-total-item i{font-size:10px;}
+    /* Privacy neutral override */
+    .privacy-neutral{color:#F8FAFC !important;}
+    .privacy-badge-neutral{color:var(--text-sec) !important;background:rgba(255,255,255,.06) !important;filter:blur(4px);pointer-events:none;user-select:none;}
     .search-wrap{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:14px;}
     .search-wrap i{color:var(--text-muted);font-size:13px;flex-shrink:0;}
     .search-wrap input{background:none;border:none;outline:none;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;width:100%;}
@@ -653,7 +668,7 @@
   <section class="kpi-grid">
     <div class="card kpi-card k-saldo">
       <div class="kpi-icon k-saldo"><i class="fa-solid fa-wallet"></i></div>
-      <div class="kpi-lbl"><span class="kpi-lbl-dot" style="background:var(--primary)"></span>Saldo do Período</div>
+      <div class="kpi-lbl"><span class="kpi-lbl-dot" style="background:var(--primary)"></span>Saldo Realizado</div>
       <div class="kpi-val" id="kpi-saldo">R$ 0,00</div>
       <span class="kpi-badge neu" id="kpi-saldo-b">—</span>
     </div>
@@ -671,7 +686,7 @@
     </div>
     <div class="card kpi-card k-proj">
       <div class="kpi-icon k-proj"><i class="fa-solid fa-chart-line"></i></div>
-      <div class="kpi-lbl"><span class="kpi-lbl-dot" style="background:var(--cyan)"></span>Projeção / Balanço</div>
+      <div class="kpi-lbl"><span class="kpi-lbl-dot" style="background:var(--cyan)"></span>Saldo Previsto (Total)</div>
       <div class="kpi-val" id="kpi-proj">R$ 0,00</div>
       <span class="kpi-badge neu" id="kpi-proj-b">—</span>
     </div>
@@ -746,6 +761,19 @@
       <div class="ch" style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
         <div><div class="ch-title">Transações</div><div class="ch-sub" id="tx-count">0 transações</div></div>
         <button class="btn-clean-subtle" id="btn-limpar" onclick="limparDados()" title="Limpar transações do período atual"><i class="fa-solid fa-trash-can"></i> Limpar período</button>
+      </div>
+      <div class="tx-type-filter">
+        <button class="ttf-btn active" id="ttf-todos" onclick="setTxFilter('todos')"><i class="fa-solid fa-layer-group"></i> Todos</button>
+        <button class="ttf-btn ent" id="ttf-entrada" onclick="setTxFilter('entrada')"><i class="fa-solid fa-arrow-trend-up"></i> Entradas</button>
+        <button class="ttf-btn sai" id="ttf-saida" onclick="setTxFilter('saida')"><i class="fa-solid fa-arrow-trend-down"></i> Saídas</button>
+        <button class="ttf-btn fat" id="ttf-fatura" onclick="setTxFilter('pagamento-fatura')"><i class="fa-solid fa-credit-card"></i> Cartão</button>
+      </div>
+      <div class="tx-totals" id="tx-totals">
+        <div class="tx-total-item" style="color:var(--success)"><i class="fa-solid fa-arrow-trend-up"></i><span id="tx-total-ent">R$ 0,00</span></div>
+        <div style="color:var(--border-bright);font-size:11px">·</div>
+        <div class="tx-total-item" style="color:var(--danger)"><i class="fa-solid fa-arrow-trend-down"></i><span id="tx-total-sai">R$ 0,00</span></div>
+        <div style="color:var(--border-bright);font-size:11px">·</div>
+        <div class="tx-total-item" id="tx-total-bal" style="color:var(--text-sec)"><i class="fa-solid fa-scale-balanced"></i><span id="tx-total-bal-val">R$ 0,00</span></div>
       </div>
       <div class="search-wrap">
         <i class="fa-solid fa-magnifying-glass"></i>
@@ -843,6 +871,17 @@ let pendingImport = [];
 let cfHoverDay   = -1;
 let privacyMode = false;
 let editingTxId = null;
+let txTypeFilter = 'todos';
+
+function setTxFilter(v){
+  txTypeFilter = v;
+  ['todos','entrada','saida','pagamento-fatura'].forEach(k=>{
+    const id = k==='todos'?'ttf-todos':k==='entrada'?'ttf-entrada':k==='saida'?'ttf-saida':'ttf-fatura';
+    const el = document.getElementById(id);
+    if(el) el.classList.toggle('active', k===v);
+  });
+  renderTx();
+}
 
 function togglePrivacy(){
   privacyMode = !privacyMode;
@@ -854,10 +893,17 @@ function togglePrivacy(){
 }
 
 function applyPrivacy(){
-  // KPI values
+  // KPI values (blur + neutral color for saldo/proj)
   ['kpi-saldo','kpi-rec','kpi-gas','kpi-proj'].forEach(id=>{
     const el=document.getElementById(id);
-    if(el) el.classList.toggle('privacy-blur', privacyMode);
+    if(!el) return;
+    el.classList.toggle('privacy-blur', privacyMode);
+    if(id==='kpi-saldo'||id==='kpi-proj') el.classList.toggle('privacy-neutral', privacyMode);
+  });
+  // KPI badges for saldo/proj also neutral
+  ['kpi-saldo-b','kpi-proj-b'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.toggle('privacy-badge-neutral', privacyMode);
   });
   // Projection panel values
   ['proj-recebido','proj-areceber','proj-pago','proj-apagar'].forEach(id=>{
@@ -868,6 +914,21 @@ function applyPrivacy(){
   document.querySelectorAll('.tx-name,.tx-val,.al-name,.al-val,.al-date').forEach(el=>{
     el.classList.toggle('privacy-blur', privacyMode);
   });
+  // Category breakdown values
+  document.querySelectorAll('.cat-row-val').forEach(el=>{
+    el.classList.toggle('privacy-blur', privacyMode);
+  });
+  // User email
+  const emailEl = document.getElementById('user-email-label');
+  if(emailEl) emailEl.classList.toggle('privacy-blur', privacyMode);
+  // Tx totals bar
+  document.querySelectorAll('#tx-total-ent,#tx-total-sai,#tx-total-bal-val').forEach(el=>{
+    el.classList.toggle('privacy-blur', privacyMode);
+  });
+  const balWrap = document.getElementById('tx-total-bal');
+  if(balWrap && privacyMode) balWrap.style.color = 'var(--text-sec)';
+  // Re-render cashflow chart with privacy-aware Y-axis
+  try { renderCashflow(); } catch(e){}
 }
 
 // =============================================
@@ -1167,7 +1228,12 @@ function renderKPIs(){
   const totEnt=entradas.reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
   const totSai=saidas.reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
   const totFat=faturas.reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
-  const saldo=totEnt-totSai;
+
+  // Saldo REALIZADO = apenas pago/recebido
+  const saldoRec=entradas.filter(t=>t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0)
+               - saidas.filter(t=>t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  // Saldo PROJETADO = tudo incluindo pendentes
+  const saldoProj=totEnt-totSai;
 
   // Receitas card
   const recEl=document.getElementById('kpi-rec');
@@ -1181,24 +1247,24 @@ function renderKPIs(){
   const gasBEl=document.getElementById('kpi-gas-b');
   if(gasBEl){gasBEl.textContent=`${saidas.length} saída${saidas.length!==1?'s':''}${totFat>0?' · '+faturas.length+' fat.':''}`;gasBEl.className=`kpi-badge ${saidas.length?'down':'neu'}`;}
 
-  // Saldo card
+  // Saldo card = realizado (pago/recebido)
   const saldoEl=document.getElementById('kpi-saldo');
-  if(saldoEl){saldoEl.textContent=R(saldo);saldoEl.className=`kpi-val ${saldo>=0?'pos':'neg'}`;}
+  if(saldoEl){saldoEl.textContent=R(saldoRec);saldoEl.className=`kpi-val ${saldoRec>=0?'pos':'neg'}`;}
   const saldoBEl=document.getElementById('kpi-saldo-b');
-  if(saldoBEl){saldoBEl.textContent=saldo>=0?'✓ Positivo':'⚠ Negativo';saldoBEl.className=`kpi-badge ${saldo>=0?'up':'down'}`;}
+  if(saldoBEl){saldoBEl.textContent=saldoRec>=0?'✓ Realizado':'⚠ Realizado';saldoBEl.className=`kpi-badge ${saldoRec>=0?'up':'down'}`;}
 
-  // Projeção card
-  const projRec=f.filter(t=>t.tipo==='entrada'&&t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
-  const projARec=f.filter(t=>t.tipo==='entrada'&&!t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
-  const projPag=f.filter(t=>t.tipo==='saida'&&t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
-  const projAPag=f.filter(t=>t.tipo==='saida'&&!t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
-
+  // Projeção card = total com pendentes
   const projEl=document.getElementById('kpi-proj');
-  if(projEl){projEl.textContent=R(saldo);projEl.className=`kpi-val ${saldo>=0?'pos':'neg'}`;}
+  if(projEl){projEl.textContent=R(saldoProj);projEl.className=`kpi-val ${saldoProj>=0?'pos':'neg'}`;}
   const projBEl=document.getElementById('kpi-proj-b');
-  if(projBEl){projBEl.textContent=viewMode==='anual'?`Balanço ${currentDate.getFullYear()}`:`${saldo>=0?'✓ Saldo positivo':'⚠ Saldo negativo'}`;projBEl.className=`kpi-badge ${saldo>=0?'up':'down'}`;}
+  if(projBEl){projBEl.textContent=viewMode==='anual'?`Balanço ${currentDate.getFullYear()}`:`${saldoProj>=0?'✓ Projetado':'⚠ Projetado'}`;projBEl.className=`kpi-badge ${saldoProj>=0?'up':'down'}`;}
 
   // Projeção panel
+  const projRec=entradas.filter(t=>t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  const projARec=entradas.filter(t=>!t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  const projPag=saidas.filter(t=>t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  const projAPag=saidas.filter(t=>!t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+
   const recebidoEl=document.getElementById('proj-recebido');
   if(recebidoEl) recebidoEl.textContent=R(projRec);
   const areceberEl=document.getElementById('proj-areceber');
@@ -1313,7 +1379,7 @@ function renderCashflowMonthly(ctx,W,H){
     const y=getY(val);
     ctx.beginPath();ctx.moveTo(PL,y);ctx.lineTo(W-PR,y);ctx.stroke();
     ctx.fillStyle='#64748B';ctx.font='10px Inter,sans-serif';ctx.textAlign='right';ctx.textBaseline='middle';
-    ctx.fillText(R(val).replace(',00',''),PL-8,y);
+    ctx.fillText(privacyMode ? '•••' : R(val).replace(',00',''),PL-8,y);
   }
 
   // Zero line
@@ -1422,7 +1488,7 @@ function renderCashflowAnnual(ctx,W,H){
     const yPos=getY(val);
     ctx.beginPath();ctx.moveTo(PL,yPos);ctx.lineTo(W-PR,yPos);ctx.stroke();
     ctx.fillStyle='#64748B';ctx.font='10px Inter,sans-serif';ctx.textAlign='right';ctx.textBaseline='middle';
-    ctx.fillText(R(val).replace(',00',''),PL-8,yPos);
+    ctx.fillText(privacyMode ? '•••' : R(val).replace(',00',''),PL-8,yPos);
   }
 
   if(minV<0&&maxV>0){
@@ -1477,7 +1543,9 @@ function renderCashflowAnnual(ctx,W,H){
         const idx=Math.round((mx-PL)/(cW/11));
         if(idx<0||idx>11||!canvas._annualIn){tip.style.opacity='0';return;}
         const inV=canvas._annualIn[idx]||0, outV=canvas._annualOut[idx]||0, balV=canvas._annualBal[idx]||0;
-        tip.innerHTML=`<div style="font-weight:700;margin-bottom:6px">${MONTHS[idx]} ${currentDate.getFullYear()}</div><div style="color:var(--success)">▲ Receitas: ${R(inV)}</div><div style="color:var(--danger)">▼ Despesas: ${R(outV)}</div><div style="color:${balV>=0?'var(--primary-lt)':'var(--danger)'};font-weight:700;margin-top:4px">${balV>=0?'+':''}${R(balV)}</div>`;
+        const balColor = privacyMode ? '#F8FAFC' : (balV>=0 ? 'var(--primary-lt)' : 'var(--danger)');
+        const blurCls = privacyMode ? 'privacy-blur' : '';
+        tip.innerHTML=`<div style="font-weight:700;margin-bottom:6px">${MONTHS[idx]} ${currentDate.getFullYear()}</div><div style="color:var(--success)" class="${blurCls}">▲ Receitas: ${R(inV)}</div><div style="color:var(--danger)" class="${blurCls}">▼ Despesas: ${R(outV)}</div><div style="color:${balColor};font-weight:700;margin-top:4px" class="${blurCls}">${balV>=0?'+':''}${R(balV)}</div>`;
         tip.style.opacity='1';tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY-70)+'px';
         return;
       }
@@ -1492,7 +1560,9 @@ function renderCashflowAnnual(ctx,W,H){
       const {y,m}=getPeriodRange();
       const dateStr=`${String(idx+1).padStart(2,'0')}/${String(m+1).padStart(2,'0')}`;
       const bal=canvas._cumBal[idx];
-      tip.innerHTML=`<div style="font-weight:700;margin-bottom:6px">${dateStr}/${y}</div><div style="color:var(--success)">▲ Receitas: ${R(canvas._cumIn[idx])}</div><div style="color:var(--danger)">▼ Despesas: ${R(canvas._cumOut[idx])}</div><div style="color:${bal>=0?'var(--primary-lt)':'var(--danger)'};font-weight:700;margin-top:4px">${bal>=0?'+':''}${R(bal)}</div>`;
+      const balColor = privacyMode ? '#F8FAFC' : (bal>=0 ? 'var(--primary-lt)' : 'var(--danger)');
+      const blurCls = privacyMode ? 'privacy-blur' : '';
+      tip.innerHTML=`<div style="font-weight:700;margin-bottom:6px">${dateStr}/${y}</div><div style="color:var(--success)" class="${blurCls}">▲ Receitas: ${R(canvas._cumIn[idx])}</div><div style="color:var(--danger)" class="${blurCls}">▼ Despesas: ${R(canvas._cumOut[idx])}</div><div style="color:${balColor};font-weight:700;margin-top:4px" class="${blurCls}">${bal>=0?'+':''}${R(bal)}</div>`;
       tip.style.opacity='1';tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY-70)+'px';
     });
     canvas.addEventListener('mouseleave',()=>{
@@ -1570,9 +1640,10 @@ function renderCategoryBreakdown(){
   area.innerHTML=sorted.map(([catKey,total])=>{
     const cat=CATS[catKey]||CATS['outros-sai']||{lbl:'Outros',ico:'fa-box',cor:'#94A3B8'};
     const pct=Math.round((total/maxCat)*100);
-    return`<div class="cat-row"><div class="cat-row-icon" style="background:${cat.cor}22;"><i class="fa-solid ${cat.ico}" style="color:${cat.cor}"></i></div><div class="cat-row-info"><div class="cat-row-name">${cat.lbl}</div><div class="cat-row-bar-track"><div class="cat-row-bar" style="width:0%;background:${cat.cor}" data-w="${pct}"></div></div></div><div class="cat-row-val" style="color:${cat.cor}">${R(total)}</div></div>`;
+    return`<div class="cat-row"><div class="cat-row-icon" style="background:${cat.cor}22;"><i class="fa-solid ${cat.ico}" style="color:${cat.cor}"></i></div><div class="cat-row-info"><div class="cat-row-name">${cat.lbl}</div><div class="cat-row-bar-track"><div class="cat-row-bar" style="width:0%;background:${cat.cor}" data-w="${pct}"></div></div></div><div class="cat-row-val ${privacyMode?'privacy-blur':''}" style="color:${cat.cor}">${R(total)}</div></div>`;
   }).join('');
   setTimeout(()=>{area.querySelectorAll('.cat-row-bar').forEach(el=>{el.style.width=el.dataset.w+'%';});},40);
+  applyPrivacy();
 }
 
 function setUrgMode(m){
@@ -1589,7 +1660,11 @@ function renderTx(){
   const f=getFiltered();
   const searchInput=document.getElementById('search-inp');
   const search=(searchInput?searchInput.value:'').toLowerCase().trim();
-  const shown=f.filter(t=>{
+
+  // Apply type filter
+  const typeFiltered=txTypeFilter==='todos'?f:f.filter(t=>t.tipo===txTypeFilter);
+
+  const shown=typeFiltered.filter(t=>{
     if(!t) return false;
     const nome=(t.nome||'').toLowerCase();
     const catLbl=((CATS[t.categoria]||{}).lbl||'').toLowerCase();
@@ -1599,14 +1674,29 @@ function renderTx(){
     return new Date(pb.y,pb.m,pb.d)-new Date(pa.y,pa.m,pa.d);
   });
 
+  // Calculate totals directly from shown (dynamic according to active search and active type filter)
+  const sumEnt = shown.filter(t=>t.tipo==='entrada').reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  const sumSai = shown.filter(t=>t.tipo==='saida').reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  const sumFat = shown.filter(t=>t.tipo==='pagamento-fatura').reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  const sumBal = sumEnt - sumSai;
+
+  const entEl=document.getElementById('tx-total-ent'); if(entEl) entEl.textContent=R(sumEnt);
+  const saiEl=document.getElementById('tx-total-sai'); if(saiEl) saiEl.textContent=R(sumSai);
+  const balEl=document.getElementById('tx-total-bal-val'); if(balEl) balEl.textContent=R(sumBal);
+  const balWrap=document.getElementById('tx-total-bal');
+  if(balWrap) {
+    balWrap.style.color = privacyMode ? 'var(--text-sec)' : (sumBal > 0 ? 'var(--success)' : sumBal < 0 ? 'var(--danger)' : 'var(--text-sec)');
+  }
+
   const txCountEl=document.getElementById('tx-count');
   if(txCountEl){
-    txCountEl.textContent=`${shown.length} transaç${shown.length!==1?'ões':'ão'} no período`;
+    const label=search?`"${search}"`:txTypeFilter!=='todos'?txTypeFilter:'período';
+    txCountEl.textContent=`${shown.length} transaç${shown.length!==1?'ões':'ão'} — ${label}`;
   }
   const list=document.getElementById('tx-list');
   if(!list) return;
   if(!shown.length){
-    list.innerHTML=`<div class="empty-st"><i class="fa-solid fa-receipt"></i><p>${search?'Nenhum resultado.':'Nenhuma transação no período.<br>Clique em <strong>+ Transação</strong>.'}</p></div>`;return;
+    list.innerHTML=`<div class="empty-st"><i class="fa-solid fa-receipt"></i><p>${search||txTypeFilter!=='todos'?'Nenhum resultado para o filtro aplicado.':'Nenhuma transação no período.<br>Clique em <strong>+ Transação</strong>.'}</p></div>`;return;
   }
   list.innerHTML=shown.map(t=>{
     const isFatura=t.tipo==='pagamento-fatura';
