@@ -1058,36 +1058,54 @@ function renderKPIs(){
   const entradas=f.filter(t=>t.tipo==='entrada');
   const saidas=f.filter(t=>t.tipo==='saida');
   const faturas=f.filter(t=>t.tipo==='pagamento-fatura');
-  const totEnt=entradas.reduce((a,c)=>a+c.valor,0);
-  const totSai=saidas.reduce((a,c)=>a+c.valor,0);
-  const totFat=faturas.reduce((a,c)=>a+c.valor,0);
+  const totEnt=entradas.reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  const totSai=saidas.reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  const totFat=faturas.reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
   const saldo=totEnt-totSai;
 
-  document.getElementById('kpi-rec').textContent=R(totEnt);
-  document.getElementById('kpi-des').textContent=R(totSai);
-  const sEl=document.getElementById('kpi-sal');
-  sEl.textContent=R(saldo);
-  sEl.className=`kpi-v ${saldo>0?'pos':saldo<0?'neg':'neu'}`;
+  // Receitas card
+  const recEl=document.getElementById('kpi-rec');
+  if(recEl) recEl.textContent=R(totEnt);
+  const recBEl=document.getElementById('kpi-rec-b');
+  if(recBEl){recBEl.textContent=`${entradas.length} entrada${entradas.length!==1?'s':''}`;recBEl.className=`kpi-badge ${entradas.length?'up':'neu'}`;}
 
-  const kpiFatEl=document.getElementById('kpi-fat');
-  if(kpiFatEl){
-    kpiFatEl.textContent=R(totFat);
-    const subFatEl=document.getElementById('kpi-fat-sub');
-    if(subFatEl) subFatEl.textContent=`${faturas.length} transferência${faturas.length!==1?'s':''}`;
-  }
+  // Gastos card
+  const gasEl=document.getElementById('kpi-gas');
+  if(gasEl) gasEl.textContent=R(totSai);
+  const gasBEl=document.getElementById('kpi-gas-b');
+  if(gasBEl){gasBEl.textContent=`${saidas.length} saída${saidas.length!==1?'s':''}${totFat>0?' · '+faturas.length+' fat.':''}`;gasBEl.className=`kpi-badge ${saidas.length?'down':'neu'}`;}
 
-  const projRec=f.filter(t=>t.tipo==='entrada'&&t.pago).reduce((a,c)=>a+c.valor,0);
-  const projARec=f.filter(t=>t.tipo==='entrada'&&!t.pago).reduce((a,c)=>a+c.valor,0);
-  const projPag=f.filter(t=>t.tipo==='saida'&&t.pago).reduce((a,c)=>a+c.valor,0);
-  const projAPag=f.filter(t=>t.tipo==='saida'&&!t.pago).reduce((a,c)=>a+c.valor,0);
+  // Saldo card
+  const saldoEl=document.getElementById('kpi-saldo');
+  if(saldoEl){saldoEl.textContent=R(saldo);saldoEl.className=`kpi-val ${saldo>=0?'pos':'neg'}`;}
+  const saldoBEl=document.getElementById('kpi-saldo-b');
+  if(saldoBEl){saldoBEl.textContent=saldo>=0?'✓ Positivo':'⚠ Negativo';saldoBEl.className=`kpi-badge ${saldo>=0?'up':'down'}`;}
 
-  document.getElementById('kpi-proj-rec').textContent=R(projRec);
-  document.getElementById('kpi-proj-arec').textContent=R(projARec);
-  document.getElementById('kpi-proj-pag').textContent=R(projPag);
-  document.getElementById('kpi-proj-apag').textContent=R(projAPag);
+  // Projeção card
+  const projRec=f.filter(t=>t.tipo==='entrada'&&t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  const projARec=f.filter(t=>t.tipo==='entrada'&&!t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  const projPag=f.filter(t=>t.tipo==='saida'&&t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  const projAPag=f.filter(t=>t.tipo==='saida'&&!t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
 
-  const totRec=projRec+projARec, totGas=projPag+projAPag;
-  const pct=totRec>0?Math.min(100,(totGas/totRec)*100):100;
+  const projEl=document.getElementById('kpi-proj');
+  if(projEl){projEl.textContent=R(saldo);projEl.className=`kpi-val ${saldo>=0?'pos':'neg'}`;}
+  const projBEl=document.getElementById('kpi-proj-b');
+  if(projBEl){projBEl.textContent=viewMode==='anual'?`Balanço ${currentDate.getFullYear()}`:`${saldo>=0?'✓ Saldo positivo':'⚠ Saldo negativo'}`;projBEl.className=`kpi-badge ${saldo>=0?'up':'down'}`;}
+
+  // Projeção panel
+  const recebidoEl=document.getElementById('proj-recebido');
+  if(recebidoEl) recebidoEl.textContent=R(projRec);
+  const areceberEl=document.getElementById('proj-areceber');
+  if(areceberEl) areceberEl.textContent=R(projARec);
+  const pagoEl=document.getElementById('proj-pago');
+  if(pagoEl) pagoEl.textContent=R(projPag);
+  const apagarEl=document.getElementById('proj-apagar');
+  if(apagarEl) apagarEl.textContent=R(projAPag);
+
+  // Progress bar
+  const totRecTotal=projRec+projARec;
+  const totGasTotal=projPag+projAPag;
+  const pct=totRecTotal>0?Math.min(100,(totGasTotal/totRecTotal)*100):(totGasTotal>0?100:0);
   const fill=document.getElementById('proj-fill');
   if(fill){
     fill.style.width=pct+'%';
@@ -1410,9 +1428,9 @@ function renderUrgency(){
     const entidade=t.entidade||'CPF';
     let h,bg;
     if(urgMode==='TIME'){
-      h=days<0?100:days>=30?10:Math.max(10,100-(days/30)*100);
+      h=days<0?85:days>=30?10:Math.max(10,85-(days/30)*85);
       bg=days<0?'linear-gradient(to top,#7F1D1D,#FF4D6A)':days<=3?'linear-gradient(to top,#9A3412,#FF7A00)':days<=15?'linear-gradient(to top,#92400E,#FFB800)':'linear-gradient(to top,#065F46,#00E5A0)';
-    }else{h=Math.max(8,(valor/maxVal)*100);bg='linear-gradient(to top,#3B0D9E,#7B5EFF)';}
+    }else{h=Math.max(10,Math.min(80,(valor/maxVal)*80));bg='linear-gradient(to top,#3B0D9E,#7B5EFF)';}
     const dtxt=days<0?`${Math.abs(days)}d atrás`:days===0?'HOJE':`${days}d`;
     const firstLine=urgMode==='TIME'?dtxt:R(valor);
     const secondLine=urgMode==='TIME'?R(valor):dtxt;
@@ -1711,11 +1729,27 @@ function parseAndPreview(){
 
 async function confirmImport(){
   if(!pendingImport.length)return;
-  const toImport = [...pendingImport];
+  
+  // Deduplication: skip transactions already in txs with same nome+data+valor+tipo
+  const existingKeys=new Set(txs.map(t=>`${(t.nome||'').toLowerCase().trim()}|${t.data}|${parseFloat(t.valor)||0}|${t.tipo}`));
+  const toImport=pendingImport.filter(t=>{
+    const key=`${(t.nome||'').toLowerCase().trim()}|${t.data}|${parseFloat(t.valor)||0}|${t.tipo}`;
+    if(existingKeys.has(key)) return false;
+    existingKeys.add(key); // prevent duplicates within the import batch itself
+    return true;
+  });
+  const skipped=pendingImport.length-toImport.length;
+  
+  if(!toImport.length){
+    toast(`Todas as ${pendingImport.length} transações já existem (duplicatas ignoradas).`,'ok');
+    closeImport(); pendingImport=[]; return;
+  }
+  
   txs=[...txs,...toImport];
   saveData(txs);
   closeImport();renderAll();
-  toast(`${toImport.length} transaç${toImport.length!==1?'ões':'ão'} importada${toImport.length!==1?'s':''}! ✓`,'ok');
+  const msg=`${toImport.length} transaç${toImport.length!==1?'ões':'ão'} importada${toImport.length!==1?'s':''}! ✓`+(skipped>0?` (${skipped} duplicata${skipped>1?'s':''} ignorada${skipped>1?'s':''})`:'')
+  toast(msg,'ok');
   pendingImport=[];
   
   if(!currentUser){return;}
