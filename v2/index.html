@@ -1748,7 +1748,7 @@ async function confirmImport(){
   txs=[...txs,...toImport];
   saveData(txs);
   closeImport();renderAll();
-  const msg=`${toImport.length} transaç${toImport.length!==1?'ões':'ão'} importada${toImport.length!==1?'s':''}! ✓`+(skipped>0?` (${skipped} duplicata${skipped>1?'s':''} ignorada${skipped>1?'s':''})`:'')
+  const msg=`${toImport.length} transaç${toImport.length!==1?'ões':'ão'} importada${toImport.length!==1?'s':''}! ✓`+(skipped>0?` (${skipped} duplicata${skipped>1?'s':''} ignorada${skipped>1?'s':''})`:'')+` · Sincronizando...`;
   toast(msg,'ok');
   pendingImport=[];
   
