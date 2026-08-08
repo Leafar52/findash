@@ -351,6 +351,32 @@
     @keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
     .kpi-val{animation:fadeUp .45s ease both;}
     @media(max-width:768px){.topbar{gap:10px;}.topbar-mid{order:3;width:100%;justify-content:space-between;}#app{padding:0 12px 36px;}.type-sel{grid-template-columns:1fr;}}
+/* ── PRIVACY MODE ── */
+.privacy-btn{background:rgba(255,255,255,.06);border:1px solid var(--border-bright);color:var(--text-sec);border-radius:var(--radius-sm);padding:10px 13px;font-size:13px;cursor:pointer;transition:var(--t);display:flex;align-items:center;gap:6px;font-family:'Inter',sans-serif;font-weight:600;}
+.privacy-btn:hover{background:rgba(255,255,255,.1);color:var(--text);}
+.privacy-btn.active{background:rgba(123,94,255,.15);border-color:var(--primary);color:var(--primary-lt);}
+.privacy-blur{filter:blur(8px) brightness(0.4);transition:filter .3s;pointer-events:none;user-select:none;}
+.privacy-text::before{content:'••••••';}
+.privacy-text{display:inline-block;}
+
+/* ── CONFIRM DIALOG ── */
+.confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(6px);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;visibility:hidden;transition:var(--t);}
+.confirm-overlay.open{opacity:1;visibility:visible;}
+.confirm-box{background:#0B1736;border:1px solid rgba(255,77,106,.3);border-radius:18px;padding:28px;max-width:340px;width:100%;text-align:center;transform:translateY(16px) scale(.96);transition:var(--t);box-shadow:0 24px 80px rgba(0,0,0,.8);}
+.confirm-overlay.open .confirm-box{transform:translateY(0) scale(1);}
+.confirm-icon{width:52px;height:52px;border-radius:50%;background:var(--danger-bg);border:2px solid var(--danger-border);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--danger);margin:0 auto 16px;}
+.confirm-title{font-size:16px;font-weight:800;margin-bottom:8px;}
+.confirm-msg{font-size:12px;color:var(--text-sec);line-height:1.6;margin-bottom:22px;}
+.confirm-btns{display:flex;gap:10px;}
+.btn-cancel-confirm{flex:1;padding:12px;background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text-sec);border-radius:10px;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:var(--t);}
+.btn-cancel-confirm:hover{background:rgba(255,255,255,.1);color:var(--text);}
+.btn-del-confirm{flex:1;padding:12px;background:linear-gradient(135deg,#C01,var(--danger));color:#fff;border:none;border-radius:10px;font-family:'Inter',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:var(--t);box-shadow:0 4px 18px rgba(255,77,106,.3);}
+.btn-del-confirm:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(255,77,106,.5);}
+
+/* Edit button */
+.tx-edit{background:rgba(123,94,255,.12);border:none;color:var(--primary-lt);width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;cursor:pointer;opacity:0;transition:var(--t);}
+.tx-item:hover .tx-edit{opacity:1;}
+.tx-edit:hover{background:rgba(123,94,255,.28);}
   </style>
 </head>
 <body>
@@ -359,7 +385,7 @@
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal">
     <div class="modal-hd">
-      <h2 class="modal-title">Nova Transação</h2>
+      <h2 class="modal-title" id="modal-title">Nova Transação</h2>
       <button class="modal-close" id="modal-close"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="type-sel">
@@ -430,7 +456,23 @@
       <input type="checkbox" id="f-pago">
       <span>Já foi pago / recebido</span>
     </label>
-    <button class="btn-save" onclick="salvarTx()"><i class="fa-solid fa-check"></i> Salvar Transação</button>
+    <label class="fcheck" id="parcelado-check-row">
+      <input type="checkbox" id="f-parcelado" onchange="toggleParcelado()">
+      <span>Parcelado? (gera uma transação por mês)</span>
+    </label>
+    <div class="fg" id="parcela-row" style="display:none;margin-top:-8px">
+      <div class="frow">
+        <div class="fg">
+          <label class="fl">Nº de parcelas</label>
+          <input class="fi" type="number" id="f-parcelas" min="2" max="60" value="2">
+        </div>
+        <div class="fg">
+          <label class="fl">1ª parcela em</label>
+          <input class="fi" type="month" id="f-parcela-inicio">
+        </div>
+      </div>
+    </div>
+    <button class="btn-save" id="modal-save-btn" onclick="salvarTx()"><i class="fa-solid fa-check"></i> Salvar Transação</button>
   </div>
 </div>
 
@@ -498,6 +540,19 @@
           <i class="fa-solid fa-file-import"></i> Importar
         </button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DELETE DIALOG -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <div class="confirm-icon"><i class="fa-solid fa-trash-can"></i></div>
+    <div class="confirm-title">Excluir transação?</div>
+    <div class="confirm-msg" id="confirm-msg">Esta ação não pode ser desfeita.</div>
+    <div class="confirm-btns">
+      <button class="btn-cancel-confirm" onclick="closeConfirm()">Cancelar</button>
+      <button class="btn-del-confirm" onclick="confirmDelete()"><i class="fa-solid fa-trash-can"></i> Excluir</button>
     </div>
   </div>
 </div>
@@ -577,6 +632,9 @@
     </div>
 
     <div class="topbar-actions">
+      <button class="privacy-btn" id="privacy-btn" onclick="togglePrivacy()" title="Alternar modo privacidade">
+        <i class="fa-solid fa-eye" id="privacy-icon"></i>
+      </button>
       <div class="cloud-pill" id="cloud-pill" title="Clique para sincronizar com a Nuvem" onclick="initSupabaseSync()">
         <span class="cloud-dot"></span>
         <span id="cloud-status-text">Nuvem OK</span>
@@ -687,7 +745,7 @@
     <div class="card tx-card">
       <div class="ch" style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
         <div><div class="ch-title">Transações</div><div class="ch-sub" id="tx-count">0 transações</div></div>
-        <button class="btn-clean-subtle" onclick="limparDados()" title="Limpar todas as transações"><i class="fa-solid fa-trash-can"></i> Limpar tudo</button>
+        <button class="btn-clean-subtle" id="btn-limpar" onclick="limparDados()" title="Limpar transações do período atual"><i class="fa-solid fa-trash-can"></i> Limpar período</button>
       </div>
       <div class="search-wrap">
         <i class="fa-solid fa-magnifying-glass"></i>
@@ -783,6 +841,34 @@ let currentDate  = new Date(); currentDate.setDate(1); currentDate.setHours(0,0,
 let importStep   = 1;
 let pendingImport = [];
 let cfHoverDay   = -1;
+let privacyMode = false;
+let editingTxId = null;
+
+function togglePrivacy(){
+  privacyMode = !privacyMode;
+  const btn = document.getElementById('privacy-btn');
+  const ico = document.getElementById('privacy-icon');
+  btn.classList.toggle('active', privacyMode);
+  ico.className = privacyMode ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+  applyPrivacy();
+}
+
+function applyPrivacy(){
+  // KPI values
+  ['kpi-saldo','kpi-rec','kpi-gas','kpi-proj'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.toggle('privacy-blur', privacyMode);
+  });
+  // Projection panel values
+  ['proj-recebido','proj-areceber','proj-pago','proj-apagar'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.toggle('privacy-blur', privacyMode);
+  });
+  // Transaction list names and values
+  document.querySelectorAll('.tx-name,.tx-val,.al-name,.al-val,.al-date').forEach(el=>{
+    el.classList.toggle('privacy-blur', privacyMode);
+  });
+}
 
 // =============================================
 // DATA PERSISTENCE & SUPABASE CLOUD
@@ -938,13 +1024,33 @@ async function initSupabaseSync(){
 }
 
 async function limparDados(){
-  if(!confirm('Deseja apagar todas as transações e deixar o painel 100% zerado?'))return;
-  txs=[];nextId=1;saveData([]);renderAll();
-  if(!currentUser){toast('Painel zerado localmente.','ok');return;}
-  setCloudStatus('syncing','Limpando...');
-  const {error}=await sb.from('transacoes').delete().eq('user_id',currentUser.id);
-  setCloudStatus(error?'local':'online',error?'Erro Nuvem':'Nuvem OK');
-  toast('Painel zerado com sucesso!','ok');
+  const {y,m,annual} = getPeriodRange();
+  const periodoLabel = annual ? String(y) : `${MONTHS[m]} ${y}`;
+  if(!confirm(`Apagar todas as transações de ${periodoLabel}? Esta ação não pode ser desfeita.`)) return;
+  
+  const toKeep = txs.filter(t=>{
+    if(!t) return false;
+    const {y:ty,m:tm} = parseDateParts(t.data);
+    if(annual) return ty !== y;
+    return !(ty === y && tm === m);
+  });
+  const toDelete = txs.filter(t=>{
+    if(!t) return false;
+    const {y:ty,m:tm} = parseDateParts(t.data);
+    if(annual) return ty === y;
+    return ty === y && tm === m;
+  });
+  
+  txs = toKeep;
+  saveData(txs); renderAll();
+  toast(`${toDelete.length} transação${toDelete.length!==1?'ões':'ão'} de ${periodoLabel} apagada${toDelete.length!==1?'s':''}!`, 'ok');
+  
+  if(!currentUser || !toDelete.length) return;
+  setCloudStatus('syncing', 'Limpando...');
+  const ids = toDelete.map(t=>t.id).filter(id=>typeof id==='number');
+  if(!ids.length){setCloudStatus('online','Nuvem OK');return;}
+  const {error} = await sb.from('transacoes').delete().in('id', ids).eq('user_id', currentUser.id);
+  setCloudStatus(error?'local':'online', error?'Erro Nuvem':'Nuvem OK');
 }
 
 let txs=loadData();
@@ -1113,6 +1219,7 @@ function renderKPIs(){
   }
   const projPctEl=document.getElementById('proj-pct');
   if(projPctEl) projPctEl.textContent=Math.round(pct)+'% gasto';
+  applyPrivacy();
 }
 
 // =============================================
@@ -1137,6 +1244,7 @@ function renderAlerts(){
     const vc=t.days<0?'var(--danger)':t.days<=7?'var(--warning)':'var(--cyan)';
     return`<div class="al-item ${cls}"><div class="al-icon"><i class="fa-solid ${ico}"></i></div><div class="al-info"><div class="al-name">${t.nome||'Sem descrição'}</div><div class="al-date">${fmtShort(t.data)} · ${t.entidade||'CPF'} · ${dtxt}</div></div><div class="al-val" style="color:${vc}">${R(t.valor)}</div></div>`;
   }).join('');
+  applyPrivacy();
 }
 
 // =============================================
@@ -1522,11 +1630,13 @@ function renderTx(){
         <div class="tx-val ${displayTipo}">${valSign} ${R(valor)}</div>
         <div style="display:flex;align-items:center;gap:6px">
           <div class="tx-status ${t.pago?'pago':'pendente'}" title="${t.pago?(t.tipo==='entrada'?'Recebido':'Pago'):'Pendente'}" onclick="togglePago(${t.id},event)" style="cursor:pointer"></div>
+          <button class="tx-edit" onclick="openEditModal(${t.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
           <button class="tx-del" onclick="deleteTx(${t.id},event)"><i class="fa-solid fa-trash"></i></button>
         </div>
       </div>
     </div>`;
   }).join('');
+  applyPrivacy();
 }
 
 async function togglePago(id,e){
@@ -1542,15 +1652,33 @@ async function togglePago(id,e){
   setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
 }
 
-async function deleteTx(id,e){
+let _pendingDeleteId = null;
+
+function deleteTx(id, e){
   e.stopPropagation();
-  txs=txs.filter(x=>x.id!==id);
-  saveData(txs);renderAll();
-  toast('Transação excluída','ok');
-  if(!currentUser||typeof id!=='number')return;
+  _pendingDeleteId = id;
+  const t = txs.find(x => x.id === id);
+  const msgEl = document.getElementById('confirm-msg');
+  if(msgEl && t) msgEl.textContent = `"${t.nome || 'Transação'}" será excluída permanentemente.`;
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+
+function closeConfirm(){
+  document.getElementById('confirm-overlay').classList.remove('open');
+  _pendingDeleteId = null;
+}
+
+async function confirmDelete(){
+  const id = _pendingDeleteId;
+  closeConfirm();
+  if(id === null) return;
+  txs = txs.filter(x => x.id !== id);
+  saveData(txs); renderAll();
+  toast('Transação excluída', 'ok');
+  if(!currentUser || typeof id !== 'number') return;
   setCloudStatus('syncing','Excluindo...');
-  const {error}=await sb.from('transacoes').delete().eq('id',id).eq('user_id',currentUser.id);
-  setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
+  const {error} = await sb.from('transacoes').delete().eq('id', id).eq('user_id', currentUser.id);
+  setCloudStatus(error?'local':'online', error?'Salvo local':'Nuvem OK');
 }
 
 // =============================================
@@ -1578,10 +1706,47 @@ function updateCfLegend(){
 // TRANSACTION MODAL
 // =============================================
 function openModal(){
+  editingTxId = null;
+  document.getElementById('modal-title').textContent = 'Nova Transação';
+  document.getElementById('modal-save-btn').innerHTML = '<i class="fa-solid fa-check"></i> Salvar Transação';
+  document.getElementById('parcelado-check-row').style.display = '';
+  document.getElementById('f-parcelado').checked = false;
+  document.getElementById('parcela-row').style.display = 'none';
   document.getElementById('modal-overlay').classList.add('open');
   const now=new Date();
   document.getElementById('f-data').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
   document.getElementById('f-nome').focus();
+}
+
+function openEditModal(id){
+  const t = txs.find(x => x.id === id);
+  if(!t) return;
+  editingTxId = id;
+  selectTipo(t.tipo);
+  selectEnt(t.entidade || 'CPF');
+  document.getElementById('f-nome').value = t.nome || '';
+  document.getElementById('f-valor').value = t.valor || '';
+  document.getElementById('f-data').value = t.data || '';
+  document.getElementById('f-cat').value = t.categoria || '';
+  document.getElementById('f-rec').value = t.recorrente || 'unica';
+  document.getElementById('f-pago').checked = !!t.pago;
+  
+  document.getElementById('f-parcelado').checked = false;
+  document.getElementById('parcela-row').style.display = 'none';
+  document.getElementById('parcelado-check-row').style.display = 'none';
+
+  document.getElementById('modal-title').textContent = 'Editar Transação';
+  document.getElementById('modal-save-btn').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Salvar Alterações';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function toggleParcelado(){
+  const checked = document.getElementById('f-parcelado').checked;
+  document.getElementById('parcela-row').style.display = checked ? '' : 'none';
+  if(checked){
+    const now = new Date();
+    document.getElementById('f-parcela-inicio').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
 }
 function closeModal(){
   document.getElementById('modal-overlay').classList.remove('open');
@@ -1596,11 +1761,29 @@ document.getElementById('modal-overlay').onclick=e=>{if(e.target===document.getE
 
 function selectTipo(v){
   formTipo=v;
-  document.getElementById('tb-entrada').classList.toggle('sel',v==='entrada');
-  document.getElementById('tb-saida').classList.toggle('sel',v==='saida');
-  document.getElementById('tb-fatura').classList.toggle('sel',v==='pagamento-fatura');
-  // Hide category for fatura (auto-set)
-  document.getElementById('cat-rec-row').style.display=v==='pagamento-fatura'?'none':'grid';
+  ['entrada','saida','pagamento-fatura'].forEach(k=>{
+    const id=k==='entrada'?'tb-entrada':k==='saida'?'tb-saida':'tb-fatura';
+    document.getElementById(id).classList.toggle('sel',k===v);
+  });
+  // Show/hide category row and filter options
+  const catRow=document.getElementById('cat-rec-row');
+  const catSel=document.getElementById('f-cat');
+  if(v==='pagamento-fatura'){
+    catRow.style.display='none';
+  } else {
+    catRow.style.display='';
+    // Show only relevant optgroups
+    const entGroup=catSel.querySelector('optgroup:first-of-type');
+    const saiGroup=catSel.querySelector('optgroup:last-of-type');
+    if(entGroup) entGroup.style.display=v==='entrada'?'':'none';
+    if(saiGroup) saiGroup.style.display=v==='saida'?'':'none';
+    // Reset selection if current option doesn't match type
+    const currentVal=catSel.value;
+    const entVals=['pro-labore','servico','freela','investimento','outros-ent'];
+    const saiVals=['moradia','alimentacao','saude','transporte','educacao','digital','impostos','contador','outros-sai'];
+    if(v==='entrada' && saiVals.includes(currentVal)) catSel.value='';
+    if(v==='saida' && entVals.includes(currentVal)) catSel.value='';
+  }
 }
 function selectEnt(v){
   formEnt=v;
@@ -1626,6 +1809,56 @@ async function salvarTx(){
     if(session?.user) currentUser = session.user;
   }
   
+  // Parcelamento
+  const isParcelado = document.getElementById('f-parcelado')?.checked;
+  if(isParcelado && editingTxId === null){
+    const nParcelas = parseInt(document.getElementById('f-parcelas')?.value) || 2;
+    const inicioVal = document.getElementById('f-parcela-inicio')?.value;
+    if(!inicioVal){toast('Informe o mês da 1ª parcela!','err');return;}
+    const [iniY, iniM] = inicioVal.split('-').map(Number);
+    const parcelas = [];
+    for(let i=0;i<nParcelas;i++){
+      const parcelaDate = new Date(iniY, iniM-1+i, 1);
+      const parcelaDateStr = `${parcelaDate.getFullYear()}-${String(parcelaDate.getMonth()+1).padStart(2,'0')}-01`;
+      const parcelaNome = `${nome} ${i+1}/${nParcelas}`;
+      parcelas.push({id:nextId+i,tipo:formTipo,entidade:formEnt,nome:parcelaNome,valor,data:parcelaDateStr,categoria:cat,recorrente:'unica',pago: i===0?pago:false});
+    }
+    nextId += nParcelas;
+    txs = [...parcelas.reverse(), ...txs];
+    saveData(txs); closeModal(); renderAll();
+    toast(`${nParcelas} parcelas criadas! ✓`,'ok');
+    // Sync to Supabase
+    if(currentUser){
+      setCloudStatus('syncing','Salvando parcelas...');
+      const supaPayload = parcelas.map(p=>({
+        tipo:p.tipo,entidade:p.entidade,nome:p.nome,valor:p.valor,data:p.data,
+        categoria:p.categoria,recorrente:p.recorrente,pago:p.pago,user_id:currentUser.id
+      }));
+      const {error} = await sb.from('transacoes').insert(supaPayload);
+      if(!error) initSupabaseSync();
+      else setCloudStatus('local','Salvo local');
+    }
+    return;
+  }
+
+  // If editing existing transaction
+  if(editingTxId !== null){
+    const idx = txs.findIndex(t => t.id === editingTxId);
+    if(idx !== -1){
+      const oldTx = txs[idx];
+      txs[idx] = {...oldTx, tipo:formTipo, entidade:formEnt, nome, valor, data, categoria:cat, recorrente:rec, pago};
+      saveData(txs); closeModal(); renderAll();
+      toast('Transação atualizada! ✓','ok');
+      if(currentUser && typeof editingTxId === 'number'){
+        setCloudStatus('syncing','Atualizando...');
+        const {error} = await sb.from('transacoes').update({tipo:formTipo,entidade:formEnt,nome,valor,data,categoria:cat,recorrente:rec,pago}).eq('id',editingTxId).eq('user_id',currentUser.id);
+        setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
+      }
+      editingTxId = null;
+      return;
+    }
+  }
+
   const newObj = {tipo:formTipo,entidade:formEnt,nome,valor,data,categoria:cat,recorrente:rec,pago,user_id:currentUser?.id};
   const tempId = nextId++;
   txs.unshift({id:tempId, ...newObj});
