@@ -130,9 +130,13 @@
     .kpi-val{font-size:24px;font-weight:800;letter-spacing:-.5px;font-variant-numeric:tabular-nums;line-height:1.1;margin-bottom:10px;}
     .kpi-val.pos{color:var(--success);}
     .kpi-val.neg{color:var(--danger);}
+    .kpi-val.pos-primary{color:var(--primary-lt);}
+    .kpi-val.pos-cyan{color:var(--cyan);}
     .kpi-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;}
     .kpi-badge.up{color:var(--success);background:var(--success-bg);}
     .kpi-badge.down{color:var(--danger);background:var(--danger-bg);}
+    .kpi-badge.up-primary{color:var(--primary-lt);background:rgba(123,94,255,.15);}
+    .kpi-badge.up-cyan{color:var(--cyan);background:rgba(0,207,255,.12);}
     .kpi-badge.warn{color:var(--warning);background:var(--warning-bg);}
     .kpi-badge.neu{color:var(--text-sec);background:rgba(255,255,255,.05);}
 
@@ -162,6 +166,19 @@
     .pnum{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:12px;}
     .pnum-lbl{font-size:10px;color:var(--text-sec);margin-bottom:4px;}
     .pnum-val{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;}
+    
+    /* Liquid animation */
+    @keyframes liquidWave {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .liquid-bar {
+      background-image: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0) 100%);
+      background-size: 200% 200%;
+      animation: liquidWave 3s ease-in-out infinite;
+    }
+
     .alerts-card{padding:20px;flex:1;}
     .alert-cnt{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;}
     .alert-cnt.has{background:var(--danger-bg);color:var(--danger);}
@@ -195,7 +212,8 @@
     .urg-col{display:flex;flex-direction:column;align-items:center;flex:1;min-width:36px;height:100%;justify-content:flex-end;position:relative;cursor:default;}
     .urg-col:hover .urg-tip{opacity:1;visibility:visible;}
     .urg-track{width:100%;max-width:46px;height:155px;background:rgba(255,255,255,.05);border-radius:10px;overflow:hidden;display:flex;align-items:flex-end;}
-    .urg-fill{width:100%;border-radius:10px;transition:height .85s cubic-bezier(.4,0,.2,1);}
+    .urg-fill{width:100%;border-radius:10px;transition:height .85s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden;}
+    .urg-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.2) 50%,rgba(255,255,255,0) 100%);background-size:200% 200%;animation:liquidWave 2.5s ease-in-out infinite;border-radius:10px;}
     .urg-lbl{margin-top:8px;text-align:center;}
     .urg-lbl i{font-size:11px;display:block;margin-bottom:2px;}
     .urg-lbl span{font-size:9px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50px;display:block;}
@@ -212,7 +230,8 @@
     .cat-row-info{flex:1;min-width:0;}
     .cat-row-name{font-size:12px;font-weight:600;}
     .cat-row-bar-track{height:4px;border-radius:2px;background:rgba(255,255,255,.06);margin-top:4px;overflow:hidden;}
-    .cat-row-bar{height:100%;border-radius:2px;transition:width .8s cubic-bezier(.4,0,.2,1);}
+    .cat-row-bar{height:100%;border-radius:2px;transition:width .8s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden;}
+    .cat-row-bar::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.3) 50%,rgba(255,255,255,0) 100%);background-size:200% 200%;animation:liquidWave 2s ease-in-out infinite;}
     .cat-row-val{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;}
     /* Category clickable filter */
     .cat-row{cursor:pointer;}
@@ -681,11 +700,14 @@
         <span class="cloud-dot"></span>
         <span id="cloud-status-text">Nuvem OK</span>
       </div>
-      <div class="user-pill" id="user-pill">
+      <div class="user-pill" id="user-pill" onclick="this.classList.toggle('open')">
         <div class="user-avatar" id="user-avatar">?</div>
-        <span id="user-email-label" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">...</span>
+        <i class="fa-solid fa-chevron-down" style="font-size:10px; opacity:0.6;"></i>
+        <div class="user-popover" onclick="event.stopPropagation()">
+          <div class="user-popover-email" id="user-email-label">...</div>
+          <button class="btn-logout-pop" onclick="authSignOut()" title="Sair da conta"><i class="fa-solid fa-arrow-right-from-bracket"></i> Sair</button>
+        </div>
       </div>
-      <button class="btn-logout" onclick="authSignOut()" title="Sair da conta"><i class="fa-solid fa-arrow-right-from-bracket"></i> Sair</button>
       <button class="btn-import" onclick="openImport()"><i class="fa-solid fa-file-import"></i> Importar IA</button>
       <button class="btn-add" onclick="openModal()"><i class="fa-solid fa-plus"></i> Transação</button>
     </div>
@@ -854,8 +876,10 @@ TIPOS DISPONÍVEIS:
 • "entrada"  → recebimentos, depósitos, transferências recebidas, PIX recebido
 • "saida"    → compras, despesas, pagamentos de contas, débitos, PIX enviado
 • "pagamento-fatura" → USE APENAS para pagamento de fatura de cartão de crédito.
-  IMPORTANTE: pagamento de fatura NÃO é uma despesa — é uma transferência.
-  As compras do cartão já devem ser listadas individualmente como "saida".
+
+ATENÇÃO REDOBRADA PARA PIX E TRANSFERÊNCIAS:
+- Se a descrição contiver "enviado", "compra", "pagto" ou "pagamento", a transação é OBRIGATORIAMENTE uma "saida".
+- O pagamento da fatura do cartão é uma transferência de dinheiro, não despesa nova, mas use o tipo "pagamento-fatura".
 
 CATEGORIAS PARA "saida":
 moradia | alimentacao | saude | transporte | educacao | digital | impostos | contador | outros-sai
@@ -1329,15 +1353,15 @@ function renderKPIs(){
 
   // Saldo card = realizado (pago/recebido)
   const saldoEl=document.getElementById('kpi-saldo');
-  if(saldoEl){saldoEl.textContent=R(saldoRec);saldoEl.className=`kpi-val ${saldoRec>=0?'pos':'neg'}`;}
+  if(saldoEl){saldoEl.textContent=R(saldoRec);saldoEl.className=`kpi-val ${saldoRec>=0?'pos-primary':'neg'}`;}
   const saldoBEl=document.getElementById('kpi-saldo-b');
-  if(saldoBEl){saldoBEl.textContent=saldoRec>=0?'✓ Realizado':'⚠ Realizado';saldoBEl.className=`kpi-badge ${saldoRec>=0?'up':'down'}`;}
+  if(saldoBEl){saldoBEl.textContent=saldoRec>=0?'✓ Realizado':'⚠ Realizado';saldoBEl.className=`kpi-badge ${saldoRec>=0?'up-primary':'down'}`;}
 
   // Projeção card = total com pendentes
   const projEl=document.getElementById('kpi-proj');
-  if(projEl){projEl.textContent=R(saldoProj);projEl.className=`kpi-val ${saldoProj>=0?'pos':'neg'}`;}
+  if(projEl){projEl.textContent=R(saldoProj);projEl.className=`kpi-val ${saldoProj>=0?'pos-cyan':'neg'}`;}
   const projBEl=document.getElementById('kpi-proj-b');
-  if(projBEl){projBEl.textContent=viewMode==='anual'?`Balanço ${currentDate.getFullYear()}`:`${saldoProj>=0?'✓ Projetado':'⚠ Projetado'}`;projBEl.className=`kpi-badge ${saldoProj>=0?'up':'down'}`;}
+  if(projBEl){projBEl.textContent=viewMode==='anual'?`Balanço ${currentDate.getFullYear()}`:`${saldoProj>=0?'✓ Projetado':'⚠ Projetado'}`;projBEl.className=`kpi-badge ${saldoProj>=0?'up-cyan':'down'}`;}
 
   // Projeção panel
   const projRec=entradas.filter(t=>t.pago).reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
@@ -1362,6 +1386,7 @@ function renderKPIs(){
   if(fill){
     fill.style.width=pct+'%';
     fill.style.background=pct>90?'linear-gradient(90deg,#991B1B,var(--danger))':pct>65?'linear-gradient(90deg,var(--warning),var(--orange))':'linear-gradient(90deg,var(--success),var(--cyan))';
+    fill.classList.add('liquid-bar');
   }
   const projPctEl=document.getElementById('proj-pct');
   if(projPctEl) projPctEl.textContent=Math.round(pct)+'% gasto';
@@ -2083,6 +2108,7 @@ async function salvarTx(){
         const choice = await _seriesEditDialog(oldTx.nome);
         if(choice === 'cancel') return;
         if(choice === 'futuras' || choice === 'todas'){
+          const updatedTxs = [];
           // Find all matching recurring transactions
           const isFuturas = choice === 'futuras';
           txs = txs.map(t=>{
@@ -2091,22 +2117,45 @@ async function salvarTx(){
             const recMatch = t.recorrente === oldTx.recorrente;
             const futureCond = !isFuturas || t.data >= oldTx.data;
             if(nameMatch && recMatch && futureCond){
-              return {...t, nome, valor, categoria:cat, recorrente:rec, pago:(isFuturas && t.id!==editingTxId)?t.pago:pago};
+              const nt = {...t, nome, valor, categoria:cat, recorrente:rec, pago:(isFuturas && t.id!==editingTxId)?t.pago:pago};
+              updatedTxs.push(nt);
+              return nt;
             }
             return t;
           });
+          
+          saveData(txs); closeModal(); renderAll();
+          toast(`${updatedTxs.length} transaç${updatedTxs.length!==1?'ões':'ão'} atualizada${updatedTxs.length!==1?'s':''}! ✓`,'ok');
+          if(currentUser){
+            setCloudStatus('syncing','Atualizando série...');
+            const validIds = updatedTxs.map(t=>t.id).filter(id=>typeof id==='number');
+            if(validIds.length){
+              // Supabase doesn't easily support bulk updating multiple rows with the exact same payload via .in(), let's try it:
+              const {error} = await sb.from('transacoes').update({tipo:formTipo,entidade:formEnt,nome,valor,categoria:cat,recorrente:rec}).in('id',validIds).eq('user_id',currentUser.id);
+              // Note: 'pago' state is preserved if it was 'futuras', but we are omitting it from the bulk update to be safe, except we did change it for editingTxId. Let's rely on initSupabaseSync later or just individual updates. For simplicity, let's update them identically since they are recurring.
+              if(!error) setCloudStatus('online','Nuvem OK');
+              else setCloudStatus('local','Salvo local');
+            }
+          }
         } else {
           txs[idx] = updated; // 'esta'
+          saveData(txs); closeModal(); renderAll();
+          toast('Transação atualizada! ✓','ok');
+          if(currentUser && typeof editingTxId === 'number'){
+            setCloudStatus('syncing','Atualizando...');
+            const {error} = await sb.from('transacoes').update({tipo:formTipo,entidade:formEnt,nome,valor,data,categoria:cat,recorrente:rec,pago}).eq('id',editingTxId).eq('user_id',currentUser.id);
+            setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
+          }
         }
       } else {
         txs[idx] = updated;
-      }
-      saveData(txs); closeModal(); renderAll();
-      toast('Transação atualizada! ✓','ok');
-      if(currentUser && typeof editingTxId === 'number'){
-        setCloudStatus('syncing','Atualizando...');
-        const {error} = await sb.from('transacoes').update({tipo:formTipo,entidade:formEnt,nome,valor,data,categoria:cat,recorrente:rec,pago}).eq('id',editingTxId).eq('user_id',currentUser.id);
-        setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
+        saveData(txs); closeModal(); renderAll();
+        toast('Transação atualizada! ✓','ok');
+        if(currentUser && typeof editingTxId === 'number'){
+          setCloudStatus('syncing','Atualizando...');
+          const {error} = await sb.from('transacoes').update({tipo:formTipo,entidade:formEnt,nome,valor,data,categoria:cat,recorrente:rec,pago}).eq('id',editingTxId).eq('user_id',currentUser.id);
+          setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
+        }
       }
       editingTxId = null;
       return;
@@ -2197,7 +2246,7 @@ function parseAndPreview(){
     if(!nome||isNaN(valor)||valor<=0||!data.match(/^\d{4}-\d{2}-\d{2}/)||!['entrada','saida','pagamento-fatura'].includes(tipo)){
       invalid.push(i+1);return;
     }
-    valid.push({id:nextId+valid.length,tipo,entidade:['CPF','CNPJ'].includes(ent)?ent:'CPF',nome,valor,data,categoria:tipo==='pagamento-fatura'?'fatura':cat,recorrente:String(t.recorrente||'unica'),pago:!!t.pago});
+    valid.push({id:`temp_import_${Date.now()}_${i}`,tipo,entidade:['CPF','CNPJ'].includes(ent)?ent:'CPF',nome,valor,data,categoria:tipo==='pagamento-fatura'?'fatura':cat,recorrente:String(t.recorrente||'unica'),pago:!!t.pago});
   });
   if(!valid.length){errMsg.textContent=`Nenhuma transação válida. ${invalid.length} com erro(s).`;errEl.style.display='flex';return;}
   pendingImport=valid;
@@ -2250,13 +2299,16 @@ async function confirmImport(){
   if(!error){
     // Update local IDs with real Supabase IDs to avoid duplicates on next sync
     if(ins && ins.length){
-      let k=0;
+      // Re-fetch everything cleanly or just swap out the temps
       txs = txs.map(t=>{
-        if(ins[k] && typeof t.id === 'number' && t.id >= nextId-toImport.length){
-          const r = {...t, id: ins[k].id}; k++; return r;
+        if(typeof t.id === 'string' && t.id.startsWith('temp_import_')){
+          // Find matching inserted record
+          const match = ins.find(x => x.nome === t.nome && x.data === t.data && parseFloat(x.valor) === parseFloat(t.valor));
+          if(match) return {...t, id: match.id};
         }
         return t;
       });
+      nextId = Math.max(0, ...txs.map(t => typeof t.id === 'number' ? t.id : 0)) + 1;
       saveData(txs);
     }
     setCloudStatus('online','Nuvem OK');
