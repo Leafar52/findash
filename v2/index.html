@@ -214,6 +214,33 @@
     .cat-row-bar-track{height:4px;border-radius:2px;background:rgba(255,255,255,.06);margin-top:4px;overflow:hidden;}
     .cat-row-bar{height:100%;border-radius:2px;transition:width .8s cubic-bezier(.4,0,.2,1);}
     .cat-row-val{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;}
+    /* Category clickable filter */
+    .cat-row{cursor:pointer;}
+    .cat-row.cat-active{background:rgba(123,94,255,.12);border-color:var(--primary) !important;}
+    .cat-filter-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(123,94,255,.15);border:1px solid var(--primary);color:var(--primary-lt);padding:4px 10px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;transition:var(--t);}
+    .cat-filter-badge:hover{background:rgba(123,94,255,.25);}
+    /* Multi-select */
+    .tx-cb{width:15px;height:15px;accent-color:var(--primary);cursor:pointer;opacity:0;transition:opacity .15s;flex-shrink:0;}
+    .tx-item:hover .tx-cb,.tx-item.selected .tx-cb,.bulk-mode .tx-cb{opacity:1;}
+    .tx-item.selected{background:rgba(123,94,255,.1);border-color:var(--primary) !important;}
+    .tx-bulk-bar{display:none;position:sticky;bottom:0;background:rgba(11,23,54,.97);border:1px solid var(--primary);border-radius:12px;padding:10px 16px;margin-top:8px;align-items:center;gap:10px;flex-wrap:wrap;backdrop-filter:blur(12px);}
+    .tx-bulk-bar.visible{display:flex;}
+    .bulk-count{font-size:12px;font-weight:700;color:var(--primary-lt);flex:1;}
+    .bulk-btn{display:flex;align-items:center;gap:5px;padding:7px 12px;border-radius:8px;border:none;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:var(--t);}
+    .bulk-btn.pago{background:var(--success-bg);color:var(--success);border:1px solid var(--success-border);}
+    .bulk-btn.pago:hover{background:rgba(0,229,160,.2);}
+    .bulk-btn.pendente{background:var(--warning-bg);color:var(--warning);border:1px solid var(--warning-border);}
+    .bulk-btn.pendente:hover{background:rgba(255,184,0,.2);}
+    .bulk-btn.del{background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger-border);}
+    .bulk-btn.del:hover{background:rgba(255,77,106,.2);}
+    .bulk-btn.cancel{background:rgba(255,255,255,.06);color:var(--text-sec);border:1px solid var(--border);}
+    .bulk-btn.cancel:hover{background:rgba(255,255,255,.1);}
+    /* Recurring types */
+    .rec-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:.2px;}
+    .rec-badge.mensal{background:rgba(0,207,255,.12);color:var(--cyan);}
+    .rec-badge.variavel{background:rgba(255,184,0,.12);color:var(--warning);}
+    .rec-badge.eventual{background:rgba(167,139,250,.12);color:var(--transfer);}
+    .rec-badge.estimado{background:rgba(255,184,0,.15);color:var(--warning);border:1px dashed rgba(255,184,0,.4);}
 
     /* ── TRANSACTIONS ── */
     .tx-card{padding:24px;display:flex;flex-direction:column;}
@@ -460,10 +487,10 @@
       <div class="fg">
         <label class="fl">Recorrência</label>
         <select class="fi" id="f-rec">
-          <option value="unica">Única</option>
-          <option value="mensal">Mensal</option>
-          <option value="semanal">Semanal</option>
-          <option value="anual">Anual</option>
+          <option value="unica">Única (não repete)</option>
+          <option value="mensal">Mensal — valor fixo (ex: aluguel)</option>
+          <option value="variavel">Mensal variável — estima média (ex: luz)</option>
+          <option value="eventual">Eventual / irregular</option>
         </select>
       </div>
     </div>
@@ -767,6 +794,7 @@
         <button class="ttf-btn ent" id="ttf-entrada" onclick="setTxFilter('entrada')"><i class="fa-solid fa-arrow-trend-up"></i> Entradas</button>
         <button class="ttf-btn sai" id="ttf-saida" onclick="setTxFilter('saida')"><i class="fa-solid fa-arrow-trend-down"></i> Saídas</button>
         <button class="ttf-btn fat" id="ttf-fatura" onclick="setTxFilter('pagamento-fatura')"><i class="fa-solid fa-credit-card"></i> Cartão</button>
+        <span class="cat-filter-badge" id="cat-filter-badge" style="display:none"></span>
       </div>
       <div class="tx-totals" id="tx-totals">
         <div class="tx-total-item" style="color:var(--success)"><i class="fa-solid fa-arrow-trend-up"></i><span id="tx-total-ent">R$ 0,00</span></div>
@@ -781,6 +809,14 @@
       </div>
       <div class="tx-list" id="tx-list">
         <div class="empty-st"><i class="fa-solid fa-receipt"></i><p>Nenhuma transação ainda.<br>Clique em <strong>+ Transação</strong> para começar.</p></div>
+      </div>
+      <!-- BULK ACTION BAR -->
+      <div class="tx-bulk-bar" id="tx-bulk-bar">
+        <span class="bulk-count" id="bulk-count">0 selecionadas</span>
+        <button class="bulk-btn pago" onclick="bulkSetPago(true)"><i class="fa-solid fa-circle-check"></i> Marcar como pago</button>
+        <button class="bulk-btn pendente" onclick="bulkSetPago(false)"><i class="fa-solid fa-clock"></i> Marcar pendente</button>
+        <button class="bulk-btn del" onclick="bulkDelete()"><i class="fa-solid fa-trash"></i> Excluir</button>
+        <button class="bulk-btn cancel" onclick="selectedTxIds.clear();renderTx()"><i class="fa-solid fa-xmark"></i> Cancelar</button>
       </div>
     </div>
   </section>
@@ -872,15 +908,47 @@ let cfHoverDay   = -1;
 let privacyMode = false;
 let editingTxId = null;
 let txTypeFilter = 'todos';
+let catFilter = null;       // category key filter from clicking cat breakdown
+let selectedTxIds = new Set();
+let _applyingPrivacy = false;
 
 function setTxFilter(v){
   txTypeFilter = v;
+  catFilter = null; // reset cat filter when type filter changes
+  _updateCatFilterBadge();
   ['todos','entrada','saida','pagamento-fatura'].forEach(k=>{
     const id = k==='todos'?'ttf-todos':k==='entrada'?'ttf-entrada':k==='saida'?'ttf-saida':'ttf-fatura';
     const el = document.getElementById(id);
     if(el) el.classList.toggle('active', k===v);
   });
   renderTx();
+}
+
+function setCatFilter(catKey){
+  if(catFilter === catKey){ catFilter = null; }
+  else { catFilter = catKey; txTypeFilter = 'saida'; }
+  // update type filter buttons
+  ['todos','entrada','saida','pagamento-fatura'].forEach(k=>{
+    const id = k==='todos'?'ttf-todos':k==='entrada'?'ttf-entrada':k==='saida'?'ttf-saida':'ttf-fatura';
+    const el = document.getElementById(id);
+    if(el) el.classList.toggle('active', k===txTypeFilter);
+  });
+  _updateCatFilterBadge();
+  renderCategoryBreakdown();
+  renderTx();
+}
+
+function _updateCatFilterBadge(){
+  const badge = document.getElementById('cat-filter-badge');
+  if(!badge) return;
+  if(catFilter){
+    const cat = CATS[catFilter]||{};
+    badge.style.display = 'inline-flex';
+    badge.innerHTML = `<i class="fa-solid ${cat.ico||'fa-tag'}"></i> ${cat.lbl||catFilter} <i class="fa-solid fa-xmark" style="font-size:9px"></i>`;
+    badge.onclick = () => setCatFilter(catFilter);
+  } else {
+    badge.style.display = 'none';
+  }
 }
 
 function togglePrivacy(){
@@ -893,42 +961,45 @@ function togglePrivacy(){
 }
 
 function applyPrivacy(){
-  // KPI values (blur + neutral color for saldo/proj)
-  ['kpi-saldo','kpi-rec','kpi-gas','kpi-proj'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(!el) return;
-    el.classList.toggle('privacy-blur', privacyMode);
-    if(id==='kpi-saldo'||id==='kpi-proj') el.classList.toggle('privacy-neutral', privacyMode);
-  });
-  // KPI badges for saldo/proj also neutral
-  ['kpi-saldo-b','kpi-proj-b'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el) el.classList.toggle('privacy-badge-neutral', privacyMode);
-  });
-  // Projection panel values
-  ['proj-recebido','proj-areceber','proj-pago','proj-apagar'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el) el.classList.toggle('privacy-blur', privacyMode);
-  });
-  // Transaction list names and values
-  document.querySelectorAll('.tx-name,.tx-val,.al-name,.al-val,.al-date').forEach(el=>{
-    el.classList.toggle('privacy-blur', privacyMode);
-  });
-  // Category breakdown values
-  document.querySelectorAll('.cat-row-val').forEach(el=>{
-    el.classList.toggle('privacy-blur', privacyMode);
-  });
-  // User email
-  const emailEl = document.getElementById('user-email-label');
-  if(emailEl) emailEl.classList.toggle('privacy-blur', privacyMode);
-  // Tx totals bar
-  document.querySelectorAll('#tx-total-ent,#tx-total-sai,#tx-total-bal-val').forEach(el=>{
-    el.classList.toggle('privacy-blur', privacyMode);
-  });
-  const balWrap = document.getElementById('tx-total-bal');
-  if(balWrap && privacyMode) balWrap.style.color = 'var(--text-sec)';
-  // Re-render cashflow chart with privacy-aware Y-axis
-  try { renderCashflow(); } catch(e){}
+  if(_applyingPrivacy) return;
+  _applyingPrivacy = true;
+  try {
+    // KPI values (blur + neutral color for saldo/proj)
+    ['kpi-saldo','kpi-rec','kpi-gas','kpi-proj'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(!el) return;
+      el.classList.toggle('privacy-blur', privacyMode);
+      if(id==='kpi-saldo'||id==='kpi-proj') el.classList.toggle('privacy-neutral', privacyMode);
+    });
+    // KPI badges for saldo/proj neutral
+    ['kpi-saldo-b','kpi-proj-b'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.classList.toggle('privacy-badge-neutral', privacyMode);
+    });
+    // Projection panel values
+    ['proj-recebido','proj-areceber','proj-pago','proj-apagar'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.classList.toggle('privacy-blur', privacyMode);
+    });
+    // Transaction list names and values
+    document.querySelectorAll('.tx-name,.tx-val,.al-name,.al-val,.al-date').forEach(el=>{
+      el.classList.toggle('privacy-blur', privacyMode);
+    });
+    // Category breakdown values
+    document.querySelectorAll('.cat-row-val').forEach(el=>{
+      el.classList.toggle('privacy-blur', privacyMode);
+    });
+    // Tx totals bar
+    document.querySelectorAll('#tx-total-ent,#tx-total-sai,#tx-total-bal-val').forEach(el=>{
+      el.classList.toggle('privacy-blur', privacyMode);
+    });
+    const balWrap = document.getElementById('tx-total-bal');
+    if(balWrap && privacyMode) balWrap.style.color = 'var(--text-sec)';
+    // Re-render cashflow chart with privacy-aware Y-axis
+    try { renderCashflow(); } catch(e){}
+  } finally {
+    _applyingPrivacy = false;
+  }
 }
 
 // =============================================
@@ -1192,6 +1263,15 @@ function updatePeriodLabel(){
 function changePeriod(delta){
   if(viewMode==='anual') currentDate=new Date(currentDate.getFullYear()+delta,0,1);
   else currentDate=new Date(currentDate.getFullYear(),currentDate.getMonth()+delta,1);
+  // Reset filters when period changes to avoid confusing empty states
+  txTypeFilter = 'todos';
+  catFilter = null;
+  selectedTxIds.clear();
+  ['ttf-todos','ttf-entrada','ttf-saida','ttf-fatura'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.toggle('active', id==='ttf-todos');
+  });
+  _updateCatFilterBadge();
   updatePeriodLabel(); renderAll();
 }
 
@@ -1626,7 +1706,7 @@ function renderCategoryBreakdown(){
   if(toggle) toggle.style.display='none';
   if(legend) legend.style.display='none';
   document.getElementById('urg-title').textContent='Gastos por Categoria';
-  document.getElementById('urg-sub').textContent=`Distribuição anual — ${currentDate.getFullYear()}`;
+  document.getElementById('urg-sub').textContent=`Distribuição anual — ${currentDate.getFullYear()} — clique para filtrar`;
   const area=document.getElementById('urg-area');
   if(!area) return;
   area.className='cat-breakdown';
@@ -1640,7 +1720,8 @@ function renderCategoryBreakdown(){
   area.innerHTML=sorted.map(([catKey,total])=>{
     const cat=CATS[catKey]||CATS['outros-sai']||{lbl:'Outros',ico:'fa-box',cor:'#94A3B8'};
     const pct=Math.round((total/maxCat)*100);
-    return`<div class="cat-row"><div class="cat-row-icon" style="background:${cat.cor}22;"><i class="fa-solid ${cat.ico}" style="color:${cat.cor}"></i></div><div class="cat-row-info"><div class="cat-row-name">${cat.lbl}</div><div class="cat-row-bar-track"><div class="cat-row-bar" style="width:0%;background:${cat.cor}" data-w="${pct}"></div></div></div><div class="cat-row-val ${privacyMode?'privacy-blur':''}" style="color:${cat.cor}">${R(total)}</div></div>`;
+    const isActive = catFilter === catKey;
+    return`<div class="cat-row${isActive?' cat-active':''}" onclick="setCatFilter('${catKey}')" title="Clique para filtrar transações de ${cat.lbl}"><div class="cat-row-icon" style="background:${cat.cor}22;"><i class="fa-solid ${cat.ico}" style="color:${cat.cor}"></i></div><div class="cat-row-info"><div class="cat-row-name">${cat.lbl}</div><div class="cat-row-bar-track"><div class="cat-row-bar" style="width:0%;background:${cat.cor}" data-w="${pct}"></div></div></div><div class="cat-row-val ${privacyMode?'privacy-blur':''}" style="color:${cat.cor}">${R(total)}</div></div>`;
   }).join('');
   setTimeout(()=>{area.querySelectorAll('.cat-row-bar').forEach(el=>{el.style.width=el.dataset.w+'%';});},40);
   applyPrivacy();
@@ -1661,8 +1742,9 @@ function renderTx(){
   const searchInput=document.getElementById('search-inp');
   const search=(searchInput?searchInput.value:'').toLowerCase().trim();
 
-  // Apply type filter
-  const typeFiltered=txTypeFilter==='todos'?f:f.filter(t=>t.tipo===txTypeFilter);
+  // Apply type filter then category filter
+  let typeFiltered = txTypeFilter==='todos' ? f : f.filter(t=>t.tipo===txTypeFilter);
+  if(catFilter) typeFiltered = typeFiltered.filter(t=>t.categoria===catFilter);
 
   const shown=typeFiltered.filter(t=>{
     if(!t) return false;
@@ -1674,29 +1756,30 @@ function renderTx(){
     return new Date(pb.y,pb.m,pb.d)-new Date(pa.y,pa.m,pa.d);
   });
 
-  // Calculate totals directly from shown (dynamic according to active search and active type filter)
+  // Totals from shown (dynamic)
   const sumEnt = shown.filter(t=>t.tipo==='entrada').reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
   const sumSai = shown.filter(t=>t.tipo==='saida').reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
-  const sumFat = shown.filter(t=>t.tipo==='pagamento-fatura').reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
   const sumBal = sumEnt - sumSai;
-
   const entEl=document.getElementById('tx-total-ent'); if(entEl) entEl.textContent=R(sumEnt);
   const saiEl=document.getElementById('tx-total-sai'); if(saiEl) saiEl.textContent=R(sumSai);
   const balEl=document.getElementById('tx-total-bal-val'); if(balEl) balEl.textContent=R(sumBal);
-  const balWrap=document.getElementById('tx-total-bal');
-  if(balWrap) {
-    balWrap.style.color = privacyMode ? 'var(--text-sec)' : (sumBal > 0 ? 'var(--success)' : sumBal < 0 ? 'var(--danger)' : 'var(--text-sec)');
-  }
+  const balWrap2=document.getElementById('tx-total-bal');
+  if(balWrap2) balWrap2.style.color = privacyMode?'var(--text-sec)':sumBal>0?'var(--success)':sumBal<0?'var(--danger)':'var(--text-sec)';
 
   const txCountEl=document.getElementById('tx-count');
   if(txCountEl){
-    const label=search?`"${search}"`:txTypeFilter!=='todos'?txTypeFilter:'período';
-    txCountEl.textContent=`${shown.length} transaç${shown.length!==1?'ões':'ão'} — ${label}`;
+    const parts=[];
+    if(search) parts.push(`"${search}"`);
+    if(txTypeFilter!=='todos') parts.push(txTypeFilter==='pagamento-fatura'?'cartão':txTypeFilter);
+    if(catFilter) parts.push((CATS[catFilter]||{}).lbl||catFilter);
+    txCountEl.textContent=`${shown.length} transaç${shown.length!==1?'ões':'ão'}${parts.length?' — '+parts.join(' + '):''}`;
   }
   const list=document.getElementById('tx-list');
   if(!list) return;
   if(!shown.length){
-    list.innerHTML=`<div class="empty-st"><i class="fa-solid fa-receipt"></i><p>${search||txTypeFilter!=='todos'?'Nenhum resultado para o filtro aplicado.':'Nenhuma transação no período.<br>Clique em <strong>+ Transação</strong>.'}</p></div>`;return;
+    list.innerHTML=`<div class="empty-st"><i class="fa-solid fa-receipt"></i><p>${(search||txTypeFilter!=='todos'||catFilter)?'Nenhum resultado para o filtro aplicado.':'Nenhuma transação no período.<br>Clique em <strong>+ Transação</strong>.'}</p></div>`;
+    _updateBulkBar();
+    return;
   }
   list.innerHTML=shown.map(t=>{
     const isFatura=t.tipo==='pagamento-fatura';
@@ -1706,7 +1789,12 @@ function renderTx(){
     const nome=t.nome||'Sem descrição';
     const entidade=t.entidade||'CPF';
     const valor=parseFloat(t.valor)||0;
-    return`<div class="tx-item ${isFatura?'fatura':''}">
+    const isSelected = selectedTxIds.has(t.id);
+    const recBadge = t.recorrente==='mensal' ? '<span class="rec-badge mensal" title="Recorrente fixo mensal"><i class="fa-solid fa-rotate"></i></span>'
+                   : t.recorrente==='variavel' ? '<span class="rec-badge variavel" title="Recorrente variável"><i class="fa-solid fa-wave-square"></i></span>'
+                   : t.recorrente==='eventual' ? '<span class="rec-badge eventual" title="Eventual/irregular"><i class="fa-solid fa-calendar-days"></i></span>' : '';
+    return`<div class="tx-item ${isFatura?'fatura':''} ${isSelected?'selected':''}" data-id="${t.id}">
+      <input type="checkbox" class="tx-cb" ${isSelected?'checked':''} onchange="toggleSelectTx(${t.id},event)">
       <div class="tx-ico ${displayTipo}"><i class="fa-solid ${isFatura?'fa-credit-card':cat.ico}" style="color:${isFatura?'var(--transfer)':cat.cor}"></i></div>
       <div class="tx-info">
         <div class="tx-name">${nome}</div>
@@ -1714,6 +1802,7 @@ function renderTx(){
           <span class="tx-date">${fmtDate(t.data)}</span>
           <span class="badge ${entidade.toLowerCase()}">${entidade}</span>
           ${isFatura?'<span class="badge fatura">Transf. Fatura</span>':'<span class="badge cat">'+cat.lbl+'</span>'}
+          ${recBadge}
         </div>
       </div>
       <div class="tx-right">
@@ -1726,7 +1815,58 @@ function renderTx(){
       </div>
     </div>`;
   }).join('');
+  _updateBulkBar();
   applyPrivacy();
+}
+
+function toggleSelectTx(id, e){
+  e.stopPropagation();
+  if(selectedTxIds.has(id)) selectedTxIds.delete(id);
+  else selectedTxIds.add(id);
+  // Update visual state without full re-render
+  const item = document.querySelector(`.tx-item[data-id="${id}"]`);
+  if(item) item.classList.toggle('selected', selectedTxIds.has(id));
+  _updateBulkBar();
+}
+
+function _updateBulkBar(){
+  const bar = document.getElementById('tx-bulk-bar');
+  if(!bar) return;
+  const count = selectedTxIds.size;
+  bar.classList.toggle('visible', count > 0);
+  const countEl = document.getElementById('bulk-count');
+  if(countEl) countEl.textContent = `${count} selecionada${count!==1?'s':''}`;
+}
+
+async function bulkSetPago(pago){
+  const ids = [...selectedTxIds];
+  ids.forEach(id=>{
+    const t = txs.find(x=>x.id===id);
+    if(t) t.pago = pago;
+  });
+  saveData(txs); selectedTxIds.clear(); renderAll();
+  toast(`${ids.length} transaç${ids.length!==1?'ões':'ão'} marcada${ids.length!==1?'s':''} como ${pago?'pagas':'pendentes'}!`,'ok');
+  if(currentUser){
+    setCloudStatus('syncing','Atualizando...');
+    await Promise.all(ids.filter(id=>typeof id==='number').map(id=>
+      sb.from('transacoes').update({pago}).eq('id',id).eq('user_id',currentUser.id)
+    ));
+    setCloudStatus('online','Nuvem OK');
+  }
+}
+
+async function bulkDelete(){
+  const ids = [...selectedTxIds];
+  if(!confirm(`Excluir ${ids.length} transaç${ids.length!==1?'ões':'ão'} selecionada${ids.length!==1?'s':''}? Esta ação não pode ser desfeita.`)) return;
+  txs = txs.filter(t=>!ids.includes(t.id));
+  saveData(txs); selectedTxIds.clear(); renderAll();
+  toast(`${ids.length} transaç${ids.length!==1?'ões':'ão'} excluída${ids.length!==1?'s':''}!`,'ok');
+  if(currentUser){
+    setCloudStatus('syncing','Excluindo...');
+    const numIds = ids.filter(id=>typeof id==='number');
+    if(numIds.length) await sb.from('transacoes').delete().in('id',numIds).eq('user_id',currentUser.id);
+    setCloudStatus('online','Nuvem OK');
+  }
 }
 
 async function togglePago(id,e){
@@ -1845,6 +1985,7 @@ function closeModal(){
   document.getElementById('f-pago').checked=false;
   selectTipo('entrada');selectEnt('CPF');
   document.getElementById('cat-rec-row').style.display='grid';
+  editingTxId = null; // Bug fix: always reset editing state
 }
 document.getElementById('modal-close').onclick=closeModal;
 document.getElementById('modal-overlay').onclick=e=>{if(e.target===document.getElementById('modal-overlay'))closeModal();};
@@ -1936,7 +2077,30 @@ async function salvarTx(){
     const idx = txs.findIndex(t => t.id === editingTxId);
     if(idx !== -1){
       const oldTx = txs[idx];
-      txs[idx] = {...oldTx, tipo:formTipo, entidade:formEnt, nome, valor, data, categoria:cat, recorrente:rec, pago};
+      const updated = {...oldTx, tipo:formTipo, entidade:formEnt, nome, valor, data, categoria:cat, recorrente:rec, pago};
+      // Check if recurring — offer series edit
+      if(oldTx.recorrente === 'mensal' || oldTx.recorrente === 'variavel'){
+        const choice = await _seriesEditDialog(oldTx.nome);
+        if(choice === 'cancel') return;
+        if(choice === 'futuras' || choice === 'todas'){
+          // Find all matching recurring transactions
+          const isFuturas = choice === 'futuras';
+          txs = txs.map(t=>{
+            if(!t) return t;
+            const nameMatch = (t.nome||'').toLowerCase().trim() === (oldTx.nome||'').toLowerCase().trim();
+            const recMatch = t.recorrente === oldTx.recorrente;
+            const futureCond = !isFuturas || t.data >= oldTx.data;
+            if(nameMatch && recMatch && futureCond){
+              return {...t, nome, valor, categoria:cat, recorrente:rec, pago:(isFuturas && t.id!==editingTxId)?t.pago:pago};
+            }
+            return t;
+          });
+        } else {
+          txs[idx] = updated; // 'esta'
+        }
+      } else {
+        txs[idx] = updated;
+      }
       saveData(txs); closeModal(); renderAll();
       toast('Transação atualizada! ✓','ok');
       if(currentUser && typeof editingTxId === 'number'){
@@ -2058,7 +2222,7 @@ async function confirmImport(){
   const toImport=pendingImport.filter(t=>{
     const key=`${(t.nome||'').toLowerCase().trim()}|${t.data}|${parseFloat(t.valor)||0}|${t.tipo}`;
     if(existingKeys.has(key)) return false;
-    existingKeys.add(key); // prevent duplicates within the import batch itself
+    existingKeys.add(key);
     return true;
   });
   const skipped=pendingImport.length-toImport.length;
@@ -2082,9 +2246,62 @@ async function confirmImport(){
     entidade:t.entidade, categoria:t.categoria,
     recorrente:t.recorrente, pago:t.pago, user_id:currentUser.id
   }));
-  const {error}=await sb.from('transacoes').insert(payload);
-  if(!error){initSupabaseSync();}
-  else{console.warn('Erro import Supabase:',error);setCloudStatus('local','Salvo local');}
+  const {data:ins, error}=await sb.from('transacoes').insert(payload).select();
+  if(!error){
+    // Update local IDs with real Supabase IDs to avoid duplicates on next sync
+    if(ins && ins.length){
+      let k=0;
+      txs = txs.map(t=>{
+        if(ins[k] && typeof t.id === 'number' && t.id >= nextId-toImport.length){
+          const r = {...t, id: ins[k].id}; k++; return r;
+        }
+        return t;
+      });
+      saveData(txs);
+    }
+    setCloudStatus('online','Nuvem OK');
+  } else {
+    console.warn('Erro import Supabase:',error);
+    setCloudStatus('local','Salvo local');
+  }
+}
+
+// =============================================
+// MOVING AVERAGE & RECURRENCE HELPERS
+// =============================================
+function calcularMediaMovel(nome, tipo='saida', n=3){
+  const historico = txs
+    .filter(t => t && t.pago && t.tipo===tipo && (t.nome||'').toLowerCase().trim() === (nome||'').toLowerCase().trim())
+    .sort((a,b) => b.data.localeCompare(a.data))
+    .slice(0, n);
+  if(!historico.length) return null;
+  return historico.reduce((s,t)=>s+(parseFloat(t.valor)||0),0) / historico.length;
+}
+
+function _seriesEditDialog(nome){
+  return new Promise(resolve=>{
+    // Create inline dialog
+    const overlay = document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);z-index:3000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML=`
+      <div style="background:#0B1736;border:1px solid rgba(123,94,255,.35);border-radius:18px;padding:28px;max-width:360px;width:100%;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.85);">
+        <div style="width:48px;height:48px;border-radius:50%;background:rgba(123,94,255,.15);border:2px solid var(--primary);display:flex;align-items:center;justify-content:center;font-size:20px;margin:0 auto 16px;">🔄</div>
+        <div style="font-size:16px;font-weight:800;margin-bottom:8px;">Editar Recorrência</div>
+        <div style="font-size:12px;color:var(--text-sec);margin-bottom:22px;line-height:1.6;">"${nome}" é uma transação recorrente.<br>Qual escopo deseja editar?</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button id="_se-esta" style="padding:12px;background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);border-radius:10px;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Apenas esta ocorrência</button>
+          <button id="_se-futuras" style="padding:12px;background:rgba(123,94,255,.15);border:1px solid var(--primary);color:var(--primary-lt);border-radius:10px;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Esta e as futuras</button>
+          <button id="_se-todas" style="padding:12px;background:rgba(0,229,160,.1);border:1px solid var(--success-border);color:var(--success);border-radius:10px;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Todas as ocorrências</button>
+          <button id="_se-cancel" style="padding:10px;background:none;border:none;color:var(--text-muted);font-family:Inter,sans-serif;font-size:12px;cursor:pointer;">Cancelar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const cleanup = (val)=>{ document.body.removeChild(overlay); resolve(val); };
+    overlay.querySelector('#_se-esta').onclick   = ()=>cleanup('esta');
+    overlay.querySelector('#_se-futuras').onclick = ()=>cleanup('futuras');
+    overlay.querySelector('#_se-todas').onclick   = ()=>cleanup('todas');
+    overlay.querySelector('#_se-cancel').onclick  = ()=>cleanup('cancel');
+  });
 }
 
 // =============================================
