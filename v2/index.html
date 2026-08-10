@@ -836,6 +836,8 @@
         <div class="tx-total-item" style="color:var(--success)"><i class="fa-solid fa-arrow-trend-up"></i><span id="tx-total-ent">R$ 0,00</span></div>
         <div style="color:var(--border-bright);font-size:11px">·</div>
         <div class="tx-total-item" style="color:var(--danger)"><i class="fa-solid fa-arrow-trend-down"></i><span id="tx-total-sai">R$ 0,00</span></div>
+        <div id="tx-total-fat-dot" style="color:var(--border-bright);font-size:11px;display:none">·</div>
+        <div class="tx-total-item" id="tx-total-fat-wrap" style="color:#A78BFA;display:none"><i class="fa-solid fa-credit-card"></i><span id="tx-total-fat">R$ 0,00</span></div>
         <div style="color:var(--border-bright);font-size:11px">·</div>
         <div class="tx-total-item" id="tx-total-bal" style="color:var(--text-sec)"><i class="fa-solid fa-scale-balanced"></i><span id="tx-total-bal-val">R$ 0,00</span></div>
       </div>
@@ -1803,10 +1805,20 @@ function renderTx(){
   // Totals from shown (dynamic)
   const sumEnt = shown.filter(t=>t.tipo==='entrada').reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
   const sumSai = shown.filter(t=>t.tipo==='saida').reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
-  const sumBal = sumEnt - sumSai;
+  const sumFat = shown.filter(t=>t.tipo==='pagamento-fatura').reduce((a,c)=>a+(parseFloat(c.valor)||0),0);
+  const sumBal = sumEnt - sumSai; // fatura is not deducted from balance
   const entEl=document.getElementById('tx-total-ent'); if(entEl) entEl.textContent=R(sumEnt);
   const saiEl=document.getElementById('tx-total-sai'); if(saiEl) saiEl.textContent=R(sumSai);
   const balEl=document.getElementById('tx-total-bal-val'); if(balEl) balEl.textContent=R(sumBal);
+  const fatEl=document.getElementById('tx-total-fat'); if(fatEl) fatEl.textContent=R(sumFat);
+  
+  const fatDot=document.getElementById('tx-total-fat-dot');
+  const fatWrap=document.getElementById('tx-total-fat-wrap');
+  if(fatDot && fatWrap){
+    fatDot.style.display = sumFat > 0 ? '' : 'none';
+    fatWrap.style.display = sumFat > 0 ? 'flex' : 'none';
+  }
+
   const balWrap2=document.getElementById('tx-total-bal');
   if(balWrap2) balWrap2.style.color = privacyMode?'var(--text-sec)':sumBal>0?'var(--success)':sumBal<0?'var(--danger)':'var(--text-sec)';
 
