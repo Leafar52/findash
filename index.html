@@ -2121,70 +2121,64 @@ async function salvarTx(){
     const idx = txs.findIndex(t => t.id === editingTxId);
     if(idx !== -1){
       const oldTx = txs[idx];
+      const capturedId = oldTx.id; // capture BEFORE closeModal nulls editingTxId
       const updated = {...oldTx, tipo:formTipo, entidade:formEnt, nome, valor, data, categoria:cat, recorrente:rec, pago};
-      // Check if recurring — offer series edit
+
+      // Helper: push a single tx update to Supabase
+      const pushUpdate = async (txObj) => {
+        if(!currentUser) return;
+        if(typeof txObj.id !== 'number'){ await initSupabaseSync(); return; }
+        const {error} = await sb.from('transacoes').update({
+          tipo:txObj.tipo, entidade:txObj.entidade, nome:txObj.nome,
+          valor:txObj.valor, data:txObj.data, categoria:txObj.categoria,
+          recorrente:txObj.recorrente, pago:txObj.pago
+        }).eq('id', txObj.id).eq('user_id', currentUser.id);
+        if(error) console.error('Supabase update error:', error, 'id:', txObj.id);
+        setCloudStatus(error?'local':'online', error?'Salvo local':'Nuvem OK');
+      };
+
       if(oldTx.recorrente === 'mensal' || oldTx.recorrente === 'variavel'){
         const choice = await _seriesEditDialog(oldTx.nome);
         if(choice === 'cancel') return;
         if(choice === 'futuras' || choice === 'todas'){
           const updatedTxs = [];
-          // Find all matching recurring transactions
           const isFuturas = choice === 'futuras';
           txs = txs.map(t=>{
             if(!t) return t;
             const nameMatch = (t.nome||'').toLowerCase().trim() === (oldTx.nome||'').toLowerCase().trim();
-            const recMatch = t.recorrente === oldTx.recorrente;
-            const futureCond = !isFuturas || t.data >= oldTx.data;
-            if(nameMatch && recMatch && futureCond){
-              const nt = {...t, nome, valor, categoria:cat, recorrente:rec, pago:(isFuturas && t.id!==editingTxId)?t.pago:pago};
+            if(nameMatch && t.recorrente === oldTx.recorrente && (!isFuturas || t.data >= oldTx.data)){
+              const nt = {...t, tipo:formTipo, entidade:formEnt, nome, valor, categoria:cat, recorrente:rec,
+                          pago: (isFuturas && t.id !== capturedId) ? t.pago : pago};
               updatedTxs.push(nt);
               return nt;
             }
             return t;
           });
-          
+          editingTxId = null;
           saveData(txs); closeModal(); renderAll();
           toast(`${updatedTxs.length} transaç${updatedTxs.length!==1?'ões':'ão'} atualizada${updatedTxs.length!==1?'s':''}! ✓`,'ok');
-          if(currentUser){
+          if(currentUser && updatedTxs.length){
             setCloudStatus('syncing','Atualizando série...');
-            const validIds = updatedTxs.map(t=>t.id).filter(id=>typeof id==='number');
-            if(validIds.length){
-              // Supabase doesn't easily support bulk updating multiple rows with the exact same payload via .in(), let's try it:
-              const {error} = await sb.from('transacoes').update({tipo:formTipo,entidade:formEnt,nome,valor,categoria:cat,recorrente:rec}).in('id',validIds).eq('user_id',currentUser.id);
-              // Note: 'pago' state is preserved if it was 'futuras', but we are omitting it from the bulk update to be safe, except we did change it for editingTxId. Let's rely on initSupabaseSync later or just individual updates. For simplicity, let's update them identically since they are recurring.
-              if(!error) setCloudStatus('online','Nuvem OK');
-              else setCloudStatus('local','Salvo local');
-            }
+            for(const t of updatedTxs) await pushUpdate(t);
           }
         } else {
-          txs[idx] = updated; // 'esta'
+          // 'esta' — only this occurrence
+          txs[idx] = updated;
+          editingTxId = null;
           saveData(txs); closeModal(); renderAll();
           toast('Transação atualizada! ✓','ok');
-          if(currentUser && typeof editingTxId === 'number'){
-            setCloudStatus('syncing','Atualizando...');
-            const {error} = await sb.from('transacoes').update({tipo:formTipo,entidade:formEnt,nome,valor,data,categoria:cat,recorrente:rec,pago}).eq('id',editingTxId).eq('user_id',currentUser.id);
-            setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
-          }
+          setCloudStatus('syncing','Atualizando...');
+          await pushUpdate(updated);
         }
       } else {
+        // Non-recurring
         txs[idx] = updated;
+        editingTxId = null;
         saveData(txs); closeModal(); renderAll();
         toast('Transação atualizada! ✓','ok');
-        if(currentUser){
-          setCloudStatus('syncing','Atualizando...');
-          // Support both numeric and string IDs (imported transactions may have string temp IDs resolved by Supabase)
-          const idToUpdate = updated.id;
-          if(typeof idToUpdate === 'number'){
-            const {error} = await sb.from('transacoes').update({tipo:formTipo,entidade:formEnt,nome,valor,data,categoria:cat,recorrente:rec,pago}).eq('id',idToUpdate).eq('user_id',currentUser.id);
-            setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
-          } else {
-            // ID is a temp string — this shouldn't happen for normal edits, re-sync from cloud
-            await initSupabaseSync();
-            setCloudStatus('online','Nuvem OK');
-          }
-        }
+        setCloudStatus('syncing','Atualizando...');
+        await pushUpdate(updated);
       }
-      editingTxId = null;
       return;
     }
   }
