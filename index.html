@@ -1179,7 +1179,7 @@ async function initSupabaseSync(){
   setCloudStatus('syncing','Sincronizando...');
   try{
     const {data,error}=await sb.from('transacoes')
-      .select('*').order('data',{ascending:false});
+      .select('*').eq('user_id', currentUser.id).order('data',{ascending:false});
     if(error){
       console.warn('Erro Supabase select:', error);
       setCloudStatus('local','Modo Local');
