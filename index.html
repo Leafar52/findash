@@ -2047,17 +2047,37 @@ function selectTipo(v){
     catRow.style.display='none';
   } else {
     catRow.style.display='';
-    // Show only relevant optgroups
-    const entGroup=catSel.querySelector('optgroup:first-of-type');
-    const saiGroup=catSel.querySelector('optgroup:last-of-type');
-    if(entGroup) entGroup.style.display=v==='entrada'?'':'none';
-    if(saiGroup) saiGroup.style.display=v==='saida'?'':'none';
-    // Reset selection if current option doesn't match type
-    const currentVal=catSel.value;
-    const entVals=['pro-labore','servico','freela','investimento','outros-ent'];
-    const saiVals=['moradia','alimentacao','saude','transporte','educacao','digital','impostos','contador','outros-sai'];
-    if(v==='entrada' && saiVals.includes(currentVal)) catSel.value='';
-    if(v==='saida' && entVals.includes(currentVal)) catSel.value='';
+    const currentVal = catSel.value;
+    if(v === 'entrada'){
+      catSel.innerHTML = `
+        <option value="">Selecionar...</option>
+        <optgroup label="── Entradas">
+          <option value="pro-labore">💼 Pró-labore</option>
+          <option value="servico">🤝 Serviço Prestado</option>
+          <option value="freela">💡 Freela / Projeto</option>
+          <option value="investimento">📈 Rendimento</option>
+          <option value="outros-ent">📦 Outros (Entrada)</option>
+        </optgroup>
+      `;
+    } else {
+      catSel.innerHTML = `
+        <option value="">Selecionar...</option>
+        <optgroup label="── Saídas">
+          <option value="moradia">🏠 Moradia</option>
+          <option value="alimentacao">🍽️ Alimentação</option>
+          <option value="saude">❤️ Saúde</option>
+          <option value="transporte">🚗 Transporte</option>
+          <option value="educacao">📚 Educação</option>
+          <option value="digital">💻 Digital / SaaS</option>
+          <option value="impostos">📋 Impostos / DAS</option>
+          <option value="contador">📊 Contador / Jurídico</option>
+          <option value="outros-sai">📦 Outros (Saída)</option>
+        </optgroup>
+      `;
+    }
+    // Attempt to restore selection if it still exists
+    catSel.value = currentVal;
+    if(!catSel.value) catSel.value = '';
   }
 }
 function selectEnt(v){
