@@ -34,11 +34,19 @@
     .auth-error{background:var(--danger-bg);border:1px solid var(--danger-border);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--danger);margin-bottom:14px;display:none;}
     .auth-success{background:var(--success-bg);border:1px solid var(--success-border);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--success);margin-bottom:14px;display:none;}
     .auth-footer{text-align:center;font-size:11px;color:var(--text-muted);margin-top:20px;}
-    /* ── USER PROFILE ── */
-    .user-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.05);border:1px solid var(--border-bright);padding:7px 12px 7px 7px;border-radius:20px;font-size:12px;font-weight:600;color:var(--text-sec);cursor:default;}
-    .user-avatar{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;}
-    .btn-logout{background:none;border:none;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;padding:7px 10px;border-radius:var(--radius-xs);transition:var(--t);display:inline-flex;align-items:center;gap:5px;font-family:'Inter',sans-serif;}
-    .btn-logout:hover{color:var(--danger);background:var(--danger-bg);}
+    /* ── USER PROFILE / POPOVER ── */
+    .user-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.05);border:1px solid var(--border-bright);padding:6px 10px 6px 6px;border-radius:20px;font-size:12px;font-weight:600;color:var(--text-sec);cursor:pointer;position:relative;transition:all .2s;}
+    .user-pill:hover{background:rgba(255,255,255,.09);}
+    .user-avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;}
+    .user-popover{position:absolute;top:calc(100% + 10px);right:0;background:rgba(9,21,38,.98);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.8);min-width:210px;z-index:9000;opacity:0;visibility:hidden;transform:translateY(-8px) scale(.97);transition:all .2s cubic-bezier(.4,0,.2,1);backdrop-filter:blur(16px);}
+    .user-pill.open .user-popover{opacity:1;visibility:visible;transform:translateY(0) scale(1);}
+    .user-popover-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.07);}
+    .user-popover-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;flex-shrink:0;}
+    .user-popover-info{flex:1;min-width:0;}
+    .user-popover-name{font-size:13px;font-weight:700;color:var(--text);}
+    .user-popover-email{font-size:11px;color:var(--text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+    .btn-logout-pop{display:flex;align-items:center;gap:8px;width:100%;background:var(--danger-bg);border:1px solid var(--danger-border);color:var(--danger);padding:9px 12px;border-radius:8px;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:var(--t);}
+    .btn-logout-pop:hover{background:rgba(255,77,106,.22);}
   </style>
   <style>
     :root {
@@ -702,10 +710,16 @@
       </div>
       <div class="user-pill" id="user-pill" onclick="this.classList.toggle('open')">
         <div class="user-avatar" id="user-avatar">?</div>
-        <i class="fa-solid fa-chevron-down" style="font-size:10px; opacity:0.6;"></i>
+        <i class="fa-solid fa-chevron-down" style="font-size:9px;opacity:.5"></i>
         <div class="user-popover" onclick="event.stopPropagation()">
-          <div class="user-popover-email" id="user-email-label">...</div>
-          <button class="btn-logout-pop" onclick="authSignOut()" title="Sair da conta"><i class="fa-solid fa-arrow-right-from-bracket"></i> Sair</button>
+          <div class="user-popover-header">
+            <div class="user-popover-avatar" id="user-avatar-pop">?</div>
+            <div class="user-popover-info">
+              <div class="user-popover-name" id="user-name-pop">Minha Conta</div>
+              <div class="user-popover-email" id="user-email-label">...</div>
+            </div>
+          </div>
+          <button class="btn-logout-pop" onclick="authSignOut()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Sair da conta</button>
         </div>
       </div>
       <button class="btn-import" onclick="openImport()"><i class="fa-solid fa-file-import"></i> Importar IA</button>
@@ -1134,6 +1148,11 @@ function showApp(user){
   const initial=(user.email||'?')[0].toUpperCase();
   document.getElementById('user-avatar').textContent=initial;
   document.getElementById('user-email-label').textContent=user.email||'';
+  // Populate popover
+  const popAvatar = document.getElementById('user-avatar-pop');
+  if(popAvatar) popAvatar.textContent = initial;
+  const popName = document.getElementById('user-name-pop');
+  if(popName) popName.textContent = initial; // Just show initial as name for now
 }
 
 // ── CLOUD STATUS ──
@@ -2151,10 +2170,18 @@ async function salvarTx(){
         txs[idx] = updated;
         saveData(txs); closeModal(); renderAll();
         toast('Transação atualizada! ✓','ok');
-        if(currentUser && typeof editingTxId === 'number'){
+        if(currentUser){
           setCloudStatus('syncing','Atualizando...');
-          const {error} = await sb.from('transacoes').update({tipo:formTipo,entidade:formEnt,nome,valor,data,categoria:cat,recorrente:rec,pago}).eq('id',editingTxId).eq('user_id',currentUser.id);
-          setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
+          // Support both numeric and string IDs (imported transactions may have string temp IDs resolved by Supabase)
+          const idToUpdate = updated.id;
+          if(typeof idToUpdate === 'number'){
+            const {error} = await sb.from('transacoes').update({tipo:formTipo,entidade:formEnt,nome,valor,data,categoria:cat,recorrente:rec,pago}).eq('id',idToUpdate).eq('user_id',currentUser.id);
+            setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
+          } else {
+            // ID is a temp string — this shouldn't happen for normal edits, re-sync from cloud
+            await initSupabaseSync();
+            setCloudStatus('online','Nuvem OK');
+          }
         }
       }
       editingTxId = null;
@@ -2415,6 +2442,11 @@ async function checkAuthAndInit(){
 }
 
 window.addEventListener('DOMContentLoaded', checkAuthAndInit);
+// Close user popover when clicking outside
+document.addEventListener('click', function(e){
+  const pill = document.getElementById('user-pill');
+  if(pill && !pill.contains(e.target)) pill.classList.remove('open');
+});
 document.addEventListener('keydown',e=>{
   if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName))return;
   if(e.key==='n'&&!e.ctrlKey&&!e.metaKey)openModal();
