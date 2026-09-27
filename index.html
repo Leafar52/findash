@@ -1443,6 +1443,39 @@ function suppressEstimatedTx(t){
   return true;
 }
 
+function recurrenceMatchTokens(nome){
+  const cleaned=normalizeRecurringName(nome)
+    .replace(/\b(recebido|recebida|enviado|enviada|envio|banco|agencia|conta|pagamentos|instituicao|ip|sa|s|ltda|mei|cpf|cnpj)\b/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+  return cleaned.split(' ').filter(t=>t.length>=3);
+}
+
+function recurringNamesLookAlike(a,b){
+  const aTokens=recurrenceMatchTokens(a);
+  const bTokens=recurrenceMatchTokens(b);
+  if(!aTokens.length||!bTokens.length) return false;
+  const aNorm=aTokens.join(' ');
+  const bNorm=bTokens.join(' ');
+  if(aNorm.length>=6&&bNorm.length>=6&&(aNorm.includes(bNorm)||bNorm.includes(aNorm))) return true;
+  const bSet=new Set(bTokens);
+  const overlap=aTokens.filter(t=>bSet.has(t));
+  if(overlap.length>=2) return true;
+  return overlap.length===1&&Math.min(aTokens.length,bTokens.length)===1&&overlap[0].length>=5;
+}
+
+function hasRealTransactionForRecurringEstimate(candidate,y,m){
+  return txs.some(t=>{
+    if(!t||t.estimado) return false;
+    if(t.tipo!==candidate.tipo) return false;
+    if((t.entidade||'CPF').toUpperCase()!==(candidate.entidade||'CPF').toUpperCase()) return false;
+    const parts=parseDateParts(t.data);
+    if(parts.y!==y||parts.m!==m) return false;
+    if(recurrenceKeyForTx(t)===candidate.key) return true;
+    return recurringNamesLookAlike(t.nome,candidate.nome);
+  });
+}
+
 function buildApprovedRecurringEstimatesForPeriod(y,m,annual=false){
   const candidates=detectRecurringCandidates().filter(c=>c.status==='approved');
   const estimates=[];
@@ -1456,6 +1489,7 @@ function buildApprovedRecurringEstimatesForPeriod(y,m,annual=false){
     monthsToCheck.forEach(targetMonth=>{
       if(targetMonth<=latestMonth || months.includes(targetMonth)) return;
       if(isEstimatedSuppressed(c.key,y,targetMonth)) return;
+      if(hasRealTransactionForRecurringEstimate(c,y,targetMonth)) return;
       const day=Math.min(avgDay,daysInMonth(y,targetMonth));
       estimates.push({
         id:estimateIdFor(c.key,y,targetMonth),
