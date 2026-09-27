@@ -2023,7 +2023,8 @@ function renderTx(){
                    : t.recorrente==='variavel' ? '<span class="rec-badge variavel" title="Recorrente variável"><i class="fa-solid fa-wave-square"></i></span>'
                    : t.recorrente==='eventual' ? '<span class="rec-badge eventual" title="Eventual/irregular"><i class="fa-solid fa-calendar-days"></i></span>' : '';
     const estimateBadge=isEstimated?'<span class="tx-est-chip"><i class="fa-solid fa-wand-magic-sparkles"></i> Previsto</span>':'';
-    const cbHtml=isEstimated?'<input type="checkbox" class="tx-cb" disabled title="Previsão recorrente">' : `<input type="checkbox" class="tx-cb" ${isSelected?'checked':''} onclick="toggleSelectTx(${txIdLiteral},event)">`;
+    const cbTitle=isEstimated?'Selecionar previsão recorrente':'Selecionar transação';
+    const cbHtml=`<input type="checkbox" class="tx-cb" title="${cbTitle}" ${isSelected?'checked':''} onclick="toggleSelectTx(${txIdLiteral},event)">`;
     const actionsHtml=isEstimated
       ? `<div class="tx-status pendente" title="Previsto por recorrência aprovada"></div>
           <button class="tx-edit" onclick="openEstimatedEditModal('${encodeURIComponent(t.id)}')" title="Editar previsão"><i class="fa-solid fa-pen"></i></button>`
@@ -2076,15 +2077,24 @@ function _updateBulkBar(){
 
 async function bulkSetPago(pago){
   const ids = [...selectedTxIds];
-  ids.forEach(id=>{
+  const realIds=ids.filter(id=>!String(id).startsWith('rec_est_'));
+  if(!realIds.length){
+    selectedTxIds.clear();
+    renderTx();
+    toast('Previsões recorrentes são gerenciadas pela caneta de editar ou quitadas quando o extrato real entra.', 'err');
+    return;
+  }
+  realIds.forEach(id=>{
     const t = txs.find(x=>String(x.id)===String(id));
     if(t) t.pago = pago;
   });
   saveData(txs); selectedTxIds.clear(); renderAll();
-  toast(`${ids.length} transaç${ids.length!==1?'ões':'ão'} marcada${ids.length!==1?'s':''} como ${pago?'pagas':'pendentes'}!`,'ok');
+  const ignoredCount=ids.length-realIds.length;
+  const ignoredMsg=ignoredCount?` ${ignoredCount} previsão${ignoredCount!==1?'ões foram ignoradas':' foi ignorada'}.`:'';
+  toast(`${realIds.length} transaç${realIds.length!==1?'ões':'ão'} marcada${realIds.length!==1?'s':''} como ${pago?'pagas':'pendentes'}!${ignoredMsg}`,'ok');
   if(currentUser){
     setCloudStatus('syncing','Atualizando...');
-    const cloudIds=ids.filter(id=>!String(id).startsWith('temp_')&&!String(id).startsWith('rec_est_'));
+    const cloudIds=realIds.filter(id=>!String(id).startsWith('temp_'));
     await Promise.all(cloudIds.map(id=>
       sb.from('transacoes').update({pago}).eq('id',id).eq('user_id',currentUser.id)
     ));
@@ -2094,13 +2104,22 @@ async function bulkSetPago(pago){
 
 async function bulkDelete(){
   const ids = [...selectedTxIds];
-  if(!confirm(`Excluir ${ids.length} transaç${ids.length!==1?'ões':'ão'} selecionada${ids.length!==1?'s':''}? Esta ação não pode ser desfeita.`)) return;
-  txs = txs.filter(t=>!ids.includes(String(t.id)));
+  const realIds=ids.filter(id=>!String(id).startsWith('rec_est_'));
+  if(!realIds.length){
+    selectedTxIds.clear();
+    renderTx();
+    toast('Previsões recorrentes não são excluídas aqui. Edite ou rejeite a recorrência para remover a previsão.', 'err');
+    return;
+  }
+  if(!confirm(`Excluir ${realIds.length} transaç${realIds.length!==1?'ões':'ão'} selecionada${realIds.length!==1?'s':''}? Esta ação não pode ser desfeita.`)) return;
+  txs = txs.filter(t=>!realIds.includes(String(t.id)));
   saveData(txs); selectedTxIds.clear(); renderAll();
-  toast(`${ids.length} transaç${ids.length!==1?'ões':'ão'} excluída${ids.length!==1?'s':''}!`,'ok');
+  const ignoredCount=ids.length-realIds.length;
+  const ignoredMsg=ignoredCount?` ${ignoredCount} previsão${ignoredCount!==1?'ões foram ignoradas':' foi ignorada'}.`:'';
+  toast(`${realIds.length} transaç${realIds.length!==1?'ões':'ão'} excluída${realIds.length!==1?'s':''}!${ignoredMsg}`,'ok');
   if(currentUser){
     setCloudStatus('syncing','Excluindo...');
-    const cloudIds = ids.filter(id=>!String(id).startsWith('temp_')&&!String(id).startsWith('rec_est_'));
+    const cloudIds = realIds.filter(id=>!String(id).startsWith('temp_'));
     if(cloudIds.length) await sb.from('transacoes').delete().in('id',cloudIds).eq('user_id',currentUser.id);
     setCloudStatus('online','Nuvem OK');
   }
