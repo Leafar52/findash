@@ -1043,6 +1043,8 @@ REGRAS:
 • "pago": true (pois já constam no extrato)
 • "recorrente": sempre "unica"; o dashboard detecta padrões recorrentes depois e pede aprovação do usuário
 • Se a descrição original tiver aspas, remova as aspas internas ou escape como \\" dentro do campo "nome"; nunca use aspas cruas dentro de uma string JSON
+• Em faturas de cartão, mantenha parcelas no "nome" usando formato claro, ex: "Loja X (Parcela 02 de 10)"
+• Assinaturas/mensalidades de apps e serviços (Netflix, Spotify, Livelo, Google, Apple, OpenAI etc.) devem ficar como "tipo": "saida" e categoria "digital" quando fizer sentido
 
 RETORNE APENAS o array JSON puro, sem explicações, sem markdown, sem texto adicional.
 
@@ -1542,7 +1544,8 @@ function shouldShowPendingWatchItem(t){
 function extractInstallmentInfo(nome){
   const text=String(nome||'');
   let m=text.match(/\b(\d{1,2})\s*\/\s*(\d{1,2})\b/);
-  if(!m) m=text.match(/\b(?:parcela|parc\.?)\s*(\d{1,2})\s*(?:de|\/)\s*(\d{1,2})\b/i);
+  if(!m) m=text.match(/\b(?:parcela|parc\.?)\s*0*(\d{1,2})\s*(?:de|\/|-)\s*0*(\d{1,2})\b/i);
+  if(!m) m=text.match(/\b0*(\d{1,2})\s*(?:de)\s*0*(\d{1,2})\b/i);
   if(!m) return null;
   const current=parseInt(m[1],10);
   const total=parseInt(m[2],10);
@@ -1552,8 +1555,10 @@ function extractInstallmentInfo(nome){
 
 function cleanInstallmentName(nome){
   return String(nome||'Sem descrição')
-    .replace(/\b(?:parcela|parc\.?)\s*\d{1,2}\s*(?:de|\/)\s*\d{1,2}\b/ig,'')
+    .replace(/\b(?:parcela|parc\.?)\s*0*\d{1,2}\s*(?:de|\/|-)\s*0*\d{1,2}\b/ig,'')
+    .replace(/\b0*\d{1,2}\s*(?:de)\s*0*\d{1,2}\b/ig,'')
     .replace(/\b\d{1,2}\s*\/\s*\d{1,2}\b/g,'')
+    .replace(/[()]/g,'')
     .replace(/\s+/g,' ')
     .trim()||'Sem descrição';
 }
@@ -1563,7 +1568,7 @@ function isSubscriptionLike(t){
   if(t.recorrente==='mensal'||t.recorrente==='variavel'||t.estimado) return true;
   const name=normalizeRecurringName(t.nome);
   const hay=`${name} ${t.categoria||''}`;
-  return /\b(netflix|spotify|livelo|prime|amazon|disney|max|hbo|youtube|google|apple|icloud|microsoft|adobe|canva|notion|openai|chatgpt|capcut|dropbox|icloud|assinatura|mensalidade|plano|premium|saas|software|app)\b/.test(hay);
+  return /\b(netflix|spotify|livelo|prime|amazon|disney|max|hbo|youtube|google|apple|icloud|microsoft|adobe|canva|notion|openai|chatgpt|capcut|dropbox|github|figma|linkedin|uber\s*one|ifood|assinatura|mensalidade|plano|premium|saas|software|app)\b/.test(hay);
 }
 
 function getPeriodRange(){
@@ -2159,7 +2164,7 @@ function renderCommitments(){
   if(!wrap) return;
   if(viewMode==='anual'){wrap.style.display='none';return;}
   wrap.style.display='grid';
-  const f=getFiltered().filter(t=>t&&t.tipo==='saida'&&!t.pago&&shouldShowPendingWatchItem(t));
+  const f=getFiltered().filter(t=>t&&t.tipo==='saida');
   const installments=f
     .map(t=>({...t,installment:extractInstallmentInfo(t.nome)}))
     .filter(t=>t.installment)
@@ -2172,12 +2177,12 @@ function renderCommitments(){
     .slice(0,6);
   const renderList=(items,type)=>{
     if(!items.length){
-      return `<div class="commit-empty">${type==='installment'?'Nenhuma parcela pendente identificada neste mês.':'Nenhuma mensalidade pendente identificada neste mês.'}</div>`;
+      return `<div class="commit-empty">${type==='installment'?'Nenhuma parcela identificada neste mês.':'Nenhuma mensalidade identificada neste mês.'}</div>`;
     }
     return items.map(t=>{
       const cat=CATS[t.categoria]||CATS['outros-sai']||{ico:'fa-box',lbl:'Outros',cor:'#94A3B8'};
       const days=daysUntil(t.data);
-      const due=days<0?`${Math.abs(days)}d atraso`:days===0?'hoje':`${days}d`;
+      const due=t.pago?'pago':(days<0?`${Math.abs(days)}d atraso`:days===0?'hoje':`${days}d`);
       const meta=type==='installment'
         ? `Parcela ${t.installment.current}/${t.installment.total} · ${due}`
         : `${(t.recorrente==='mensal'||t.recorrente==='variavel'||t.estimado)?'Recorrente':'Mensalidade'} · ${due}`;
