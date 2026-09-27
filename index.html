@@ -532,8 +532,9 @@
     </div>
     <div class="frow">
       <div class="fg">
-        <label class="fl">Valor (R$)</label>
+        <label class="fl" id="f-valor-label">Valor (R$)</label>
         <input class="fi" type="number" id="f-valor" step="0.01" min="0" placeholder="0,00">
+        <div class="fl" id="f-valor-help" style="display:none;margin-top:7px;text-transform:none;letter-spacing:0;font-size:11px;line-height:1.45;color:var(--text-sec)"></div>
       </div>
       <div class="fg">
         <label class="fl">Data</label>
@@ -2203,6 +2204,9 @@ function openEditModal(id){
   document.getElementById('f-parcelado').checked = false;
   document.getElementById('parcela-row').style.display = 'none';
   document.getElementById('parcelado-check-row').style.display = 'none';
+  document.getElementById('f-valor-label').textContent = 'Valor (R$)';
+  document.getElementById('f-valor').step = '0.01';
+  document.getElementById('f-valor-help').style.display = 'none';
 
   document.getElementById('modal-title').textContent = 'Editar Transação';
   document.getElementById('modal-save-btn').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Salvar Alterações';
@@ -2214,10 +2218,25 @@ function openEstimatedEditModal(encodedId){
   const t=getFiltered().find(x=>String(x.id)===String(id));
   if(!t||!t.estimado) return;
   editingTxId = id;
+  const candidate=detectRecurringCandidates().find(c=>c.key===t.recurrenceKey);
+  const baseValue=parseFloat(candidate?.detectedAvgValue)||parseFloat(t.valor)||0;
+  const multiplier=parseFloat(candidate?.multiplier)||1;
   selectTipo(t.tipo);
   selectEnt(t.entidade || 'CPF');
   document.getElementById('f-nome').value = t.nome || '';
-  document.getElementById('f-valor').value = t.valor || '';
+  document.getElementById('f-valor-label').textContent = 'Vezes no mês';
+  document.getElementById('f-valor').step = '1';
+  document.getElementById('f-valor').min = '1';
+  document.getElementById('f-valor').value = Number.isInteger(multiplier)?String(multiplier):String(multiplier.toFixed(2)).replace(/\.?0+$/,'');
+  const help=document.getElementById('f-valor-help');
+  help.style.display = '';
+  help.dataset.baseValue = String(baseValue);
+  const updateHelp=()=>{
+    const times=parseFloat(document.getElementById('f-valor').value)||1;
+    help.textContent = `Valor estimado: ${R(baseValue)} x ${times} = ${R(baseValue*times)}. Use 2 quando esse gasto costuma acontecer duas vezes no mês.`;
+  };
+  document.getElementById('f-valor').oninput = updateHelp;
+  updateHelp();
   document.getElementById('f-data').value = t.data || '';
   document.getElementById('f-cat').value = t.categoria || '';
   document.getElementById('f-rec').value = t.recorrente || 'mensal';
@@ -2243,6 +2262,11 @@ function closeModal(){
   document.getElementById('f-nome').value='';document.getElementById('f-valor').value='';
   document.getElementById('f-cat').value='';document.getElementById('f-rec').value='unica';
   document.getElementById('f-pago').checked=false;
+  document.getElementById('f-valor-label').textContent='Valor (R$)';
+  document.getElementById('f-valor').step='0.01';
+  document.getElementById('f-valor').min='0';
+  document.getElementById('f-valor').oninput=null;
+  document.getElementById('f-valor-help').style.display='none';
   selectTipo('entrada');selectEnt('CPF');
   document.getElementById('cat-rec-row').style.display='';
   editingTxId = null; // Bug fix: always reset editing state
@@ -2331,7 +2355,8 @@ async function salvarTx(){
     const day=parseDateParts(data).d;
     const candidate=detectRecurringCandidates().find(c=>c.key===key);
     const baseValue=parseFloat(candidate?.detectedAvgValue)||parseFloat(estimated.valor)||valor;
-    const multiplier=baseValue?valor/baseValue:1;
+    const multiplier=Math.max(1,Math.round(valor||1));
+    const projectedValue=baseValue*multiplier;
     recurrenceDecisions[key]={
       ...(recurrenceDecisions[key]||{}),
       status:'approved',
@@ -2340,14 +2365,13 @@ async function salvarTx(){
       updatedAt:new Date().toISOString(),
       label:nome||candidate?.nome||estimated.nome,
       year:currentDate.getFullYear(),
-      overrideValue:valor,
       overrideDay:day,
-      multiplier:Number.isFinite(multiplier)?multiplier:1
+      multiplier
     };
     saveRecurrenceDecisions();
     closeModal();
     renderAll();
-    toast(`Previsão atualizada para ${R(valor)}${multiplier>1.15?` (${multiplier.toFixed(1).replace('.',',')}x a média)` : ''}.`, 'ok');
+    toast(`Previsão atualizada: ${multiplier}x no mês (${R(projectedValue)} estimado).`, 'ok');
     return;
   }
 
@@ -2701,7 +2725,9 @@ function detectRecurringCandidates(){
     const inferredRecType=approvedCount
       ? ((items.filter(t=>t.recorrente==='variavel').length>items.filter(t=>t.recorrente==='mensal').length)?'variavel':'mensal')
       : recType;
-    const avgValue=parseFloat(decision?.overrideValue)||detectedAvgValue;
+    const legacyMultiplier=decision?.overrideValue&&detectedAvgValue?parseFloat(decision.overrideValue)/detectedAvgValue:1;
+    const multiplier=parseFloat(decision?.multiplier)||legacyMultiplier||1;
+    const avgValue=detectedAvgValue*multiplier;
     const confidence=Math.min(96,Math.round(
       34+
       Math.min(months.length,6)*9+
@@ -2726,7 +2752,7 @@ function detectRecurringCandidates(){
       monthLabels,
       avgValue,
       detectedAvgValue,
-      overrideValue:decision?.overrideValue||null,
+      multiplier,
       overrideDay:decision?.overrideDay||null,
       annualTotal,
       recType:decision?.recType||inferredRecType,
