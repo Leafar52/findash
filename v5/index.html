@@ -226,11 +226,12 @@
     .bottom-grid.app-screen{display:none;}
     .bottom-grid.app-screen.active{display:flex;}
     .bottom-grid .urg-card{flex:1 1 360px;min-width:300px;}
-    .bottom-grid .tx-card{flex:0 0 var(--bottom-tx-width, 62%);min-width:460px;}
+    .bottom-grid .tx-card{flex:0 0 var(--bottom-tx-width, 62%);min-width:460px;display:flex;flex-direction:column;min-height:0;}
+    .bottom-grid .tx-card .tx-list{height:0;min-height:180px;max-height:none;flex:1 1 auto;}
     .bottom-resizer{width:10px;align-self:stretch;cursor:col-resize;border-radius:999px;position:relative;flex:0 0 10px;touch-action:none;}
     .bottom-resizer::before{content:'';position:absolute;top:18px;bottom:18px;left:50%;width:2px;transform:translateX(-50%);border-radius:999px;background:rgba(255,255,255,.08);transition:var(--t);}
     .bottom-resizer:hover::before,.bottom-resizer.dragging::before{background:var(--primary);box-shadow:0 0 18px rgba(123,94,255,.45);}
-    @media(max-width:900px){.bottom-grid,.bottom-grid.app-screen.active{display:flex;flex-direction:column;}.bottom-grid .urg-card,.bottom-grid .tx-card{flex:1 1 auto;min-width:0;width:100%;}.bottom-resizer{display:none;}}
+    @media(max-width:900px){.bottom-grid,.bottom-grid.app-screen.active{display:flex;flex-direction:column;}.bottom-grid .urg-card,.bottom-grid .tx-card{flex:1 1 auto;min-width:0;width:100%;}.bottom-grid .tx-card .tx-list{height:auto;max-height:290px;}.bottom-resizer{display:none;}}
 
     /* ── URGENCY / CATEGORY BREAKDOWN ── */
     .urg-card{padding:24px;}
