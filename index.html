@@ -254,7 +254,7 @@
     .cat-filter-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(123,94,255,.15);border:1px solid var(--primary);color:var(--primary-lt);padding:4px 10px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;transition:var(--t);}
     .cat-filter-badge:hover{background:rgba(123,94,255,.25);}
     /* Multi-select */
-    .tx-cb{width:15px;height:15px;accent-color:var(--primary);cursor:pointer;opacity:0;transition:opacity .15s;flex-shrink:0;}
+    .tx-cb{width:15px;height:15px;accent-color:var(--primary);cursor:pointer;opacity:.7;transition:opacity .15s;flex-shrink:0;}
     .tx-cb:checked,.tx-item:hover .tx-cb,.tx-item.selected .tx-cb,.bulk-mode .tx-cb{opacity:1;}
     .tx-item.selected{background:rgba(123,94,255,.1);border-color:var(--primary) !important;}
     .tx-bulk-bar{display:none;position:sticky;bottom:0;background:rgba(11,23,54,.97);border:1px solid var(--primary);border-radius:12px;padding:10px 16px;margin-top:8px;align-items:center;gap:10px;flex-wrap:wrap;backdrop-filter:blur(12px);}
@@ -2028,6 +2028,7 @@ function renderTx(){
   }
   const list=document.getElementById('tx-list');
   if(!list) return;
+  ensureTxListEvents();
   if(!shown.length){
     list.innerHTML=`<div class="empty-st"><i class="fa-solid fa-receipt"></i><p>${(search||txTypeFilter!=='todos'||catFilter)?'Nenhum resultado para o filtro aplicado.':'Nenhuma transação no período.<br>Use <strong>Importar IA</strong> para trazer dados do extrato.'}</p></div>`;
     _updateBulkBar();
@@ -2043,22 +2044,22 @@ function renderTx(){
     const valor=parseFloat(t.valor)||0;
     const isEstimated=!!t.estimado;
     const txIdKey=String(t.id);
-    const txIdLiteral=JSON.stringify(txIdKey);
     const isSelected = selectedTxIds.has(txIdKey);
+    const txIdAttr=escHtml(txIdKey);
     const recBadge = t.recorrente==='mensal' ? '<span class="rec-badge mensal" title="Recorrente fixo mensal"><i class="fa-solid fa-rotate"></i></span>'
                    : t.recorrente==='variavel' ? '<span class="rec-badge variavel" title="Recorrente variável"><i class="fa-solid fa-wave-square"></i></span>'
                    : t.recorrente==='eventual' ? '<span class="rec-badge eventual" title="Eventual/irregular"><i class="fa-solid fa-calendar-days"></i></span>' : '';
     const estimateBadge=isEstimated?'<span class="tx-est-chip"><i class="fa-solid fa-wand-magic-sparkles"></i> Previsto</span>':'';
     const cbTitle=isEstimated?'Selecionar previsão recorrente':'Selecionar transação';
-    const cbHtml=`<input type="checkbox" class="tx-cb" title="${cbTitle}" ${isSelected?'checked':''} onclick="toggleSelectTx(${txIdLiteral},event)">`;
+    const cbHtml=`<input type="checkbox" class="tx-cb" title="${cbTitle}" ${isSelected?'checked':''} data-tx-action="select" data-tx-id="${txIdAttr}">`;
     const actionsHtml=isEstimated
       ? `<div class="tx-status pendente" title="Previsto por recorrência aprovada"></div>
-          <button class="tx-edit" onclick="openEstimatedEditModal('${encodeURIComponent(t.id)}')" title="Editar previsão"><i class="fa-solid fa-pen"></i></button>
-          <button class="tx-del" onclick="deleteTx(${txIdLiteral},event)" title="Remover previsão deste mês"><i class="fa-solid fa-trash"></i></button>`
-      : `<div class="tx-status ${t.pago?'pago':'pendente'}" title="${t.pago?(t.tipo==='entrada'?'Recebido':'Pago'):'Pendente'}" onclick="togglePago(${txIdLiteral},event)" style="cursor:pointer"></div>
-          <button class="tx-edit" onclick="openEditModal(${txIdLiteral})" title="Editar"><i class="fa-solid fa-pen"></i></button>
-          <button class="tx-del" onclick="deleteTx(${txIdLiteral},event)"><i class="fa-solid fa-trash"></i></button>`;
-    return`<div class="tx-item ${isFatura?'fatura':''} ${isSelected?'selected':''} ${isEstimated?'estimated':''}" data-id="${escHtml(txIdKey)}">
+          <button type="button" class="tx-edit" data-tx-action="edit-estimated" data-tx-id="${txIdAttr}" title="Editar previsão"><i class="fa-solid fa-pen"></i></button>
+          <button type="button" class="tx-del" data-tx-action="delete" data-tx-id="${txIdAttr}" title="Remover previsão deste mês"><i class="fa-solid fa-trash"></i></button>`
+      : `<div class="tx-status ${t.pago?'pago':'pendente'}" title="${t.pago?(t.tipo==='entrada'?'Recebido':'Pago'):'Pendente'}" data-tx-action="toggle-paid" data-tx-id="${txIdAttr}" style="cursor:pointer"></div>
+          <button type="button" class="tx-edit" data-tx-action="edit" data-tx-id="${txIdAttr}" title="Editar"><i class="fa-solid fa-pen"></i></button>
+          <button type="button" class="tx-del" data-tx-action="delete" data-tx-id="${txIdAttr}" title="Excluir"><i class="fa-solid fa-trash"></i></button>`;
+    return`<div class="tx-item ${isFatura?'fatura':''} ${isSelected?'selected':''} ${isEstimated?'estimated':''}" data-id="${txIdAttr}">
       ${cbHtml}
       <div class="tx-ico ${displayTipo}"><i class="fa-solid ${isFatura?'fa-credit-card':cat.ico}" style="color:${isFatura?'var(--transfer)':cat.cor}"></i></div>
       <div class="tx-info">
@@ -2083,13 +2084,53 @@ function renderTx(){
   applyPrivacy();
 }
 
+function ensureTxListEvents(){
+  const list=document.getElementById('tx-list');
+  if(!list||list.dataset.eventsBound==='1') return;
+  list.dataset.eventsBound='1';
+  list.addEventListener('click', handleTxListAction);
+}
+
+function handleTxListAction(e){
+  const control=e.target.closest('[data-tx-action]');
+  if(!control||!e.currentTarget.contains(control)) return;
+  const action=control.dataset.txAction;
+  const id=control.dataset.txId;
+  if(!action||!id) return;
+  if(action==='select'){
+    e.stopPropagation();
+    toggleSelectTx(id,e);
+    return;
+  }
+  e.preventDefault();
+  e.stopPropagation();
+  if(action==='toggle-paid'){
+    togglePago(id,e);
+    return;
+  }
+  if(action==='edit'){
+    openEditModal(id);
+    return;
+  }
+  if(action==='edit-estimated'){
+    openEstimatedEditModal(encodeURIComponent(id));
+    return;
+  }
+  if(action==='delete'){
+    deleteTx(id,e);
+  }
+}
+
 function toggleSelectTx(id, e){
   if(e) e.stopPropagation();
   const key=String(id);
-  if(selectedTxIds.has(key)) selectedTxIds.delete(key);
-  else selectedTxIds.add(key);
+  const selected=!selectedTxIds.has(key);
+  if(selected) selectedTxIds.add(key);
+  else selectedTxIds.delete(key);
   const item = e?.target?.closest?.('.tx-item') || document.querySelector(`.tx-item[data-id="${CSS.escape(key)}"]`);
-  if(item) item.classList.toggle('selected', selectedTxIds.has(key));
+  if(item) item.classList.toggle('selected', selected);
+  const cb = e?.target?.matches?.('.tx-cb') ? e.target : item?.querySelector?.('.tx-cb');
+  if(cb) cb.checked = selected;
   _updateBulkBar();
 }
 
