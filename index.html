@@ -255,7 +255,7 @@
     .cat-filter-badge:hover{background:rgba(123,94,255,.25);}
     /* Multi-select */
     .tx-cb{width:15px;height:15px;accent-color:var(--primary);cursor:pointer;opacity:0;transition:opacity .15s;flex-shrink:0;}
-    .tx-item:hover .tx-cb,.tx-item.selected .tx-cb,.bulk-mode .tx-cb{opacity:1;}
+    .tx-cb:checked,.tx-item:hover .tx-cb,.tx-item.selected .tx-cb,.bulk-mode .tx-cb{opacity:1;}
     .tx-item.selected{background:rgba(123,94,255,.1);border-color:var(--primary) !important;}
     .tx-bulk-bar{display:none;position:sticky;bottom:0;background:rgba(11,23,54,.97);border:1px solid var(--primary);border-radius:12px;padding:10px 16px;margin-top:8px;align-items:center;gap:10px;flex-wrap:wrap;backdrop-filter:blur(12px);}
     .tx-bulk-bar.visible{display:flex;}
@@ -1406,6 +1406,10 @@ function daysUntil(s){
   return Math.ceil((t.getTime() - now.getTime()) / 86400000);
 }
 
+function shouldShowPendingWatchItem(t){
+  return daysUntil(t?.data) >= -30;
+}
+
 function getPeriodRange(){
   const y=currentDate.getFullYear(), m=currentDate.getMonth();
   if(viewMode==='anual') return {y,m:-1,days:0,annual:true};
@@ -1416,6 +1420,27 @@ function monthKey(y,m){return `${y}-${String(m+1).padStart(2,'0')}`;}
 
 function estimateIdFor(key,y,m){
   return `rec_est_${btoa(unescape(encodeURIComponent(key))).replace(/=+$/,'')}_${monthKey(y,m)}`;
+}
+
+function isEstimatedSuppressed(key,y,m){
+  const suppressed=recurrenceDecisions[key]?.suppressedMonths||[];
+  return suppressed.includes(monthKey(y,m));
+}
+
+function suppressEstimatedTx(t){
+  if(!t||!t.estimado||!t.recurrenceKey) return false;
+  const {y,m}=parseDateParts(t.data);
+  const key=t.recurrenceKey;
+  const current=recurrenceDecisions[key]||{};
+  const suppressed=new Set(current.suppressedMonths||[]);
+  suppressed.add(monthKey(y,m));
+  recurrenceDecisions[key]={
+    ...current,
+    status:current.status||'approved',
+    updatedAt:new Date().toISOString(),
+    suppressedMonths:[...suppressed].sort()
+  };
+  return true;
 }
 
 function buildApprovedRecurringEstimatesForPeriod(y,m,annual=false){
@@ -1430,6 +1455,7 @@ function buildApprovedRecurringEstimatesForPeriod(y,m,annual=false){
     const monthsToCheck=annual ? Array.from({length:12-latestMonth-1},(_,i)=>latestMonth+1+i) : [m];
     monthsToCheck.forEach(targetMonth=>{
       if(targetMonth<=latestMonth || months.includes(targetMonth)) return;
+      if(isEstimatedSuppressed(c.key,y,targetMonth)) return;
       const day=Math.min(avgDay,daysInMonth(y,targetMonth));
       estimates.push({
         id:estimateIdFor(c.key,y,targetMonth),
@@ -1588,7 +1614,7 @@ function renderKPIs(){
 function renderAlerts(){
   const {y,m}=getPeriodRange();
   const alertBase=[...txs, ...buildApprovedRecurringEstimatesForPeriod(y,m,false)];
-  const pending=alertBase.filter(t=>t&&t.tipo==='saida'&&!t.pago&&(entityFilter==='todos'||(t.entidade||'CPF').toUpperCase()===entityFilter.toUpperCase()))
+  const pending=alertBase.filter(t=>t&&t.tipo==='saida'&&!t.pago&&shouldShowPendingWatchItem(t)&&(entityFilter==='todos'||(t.entidade||'CPF').toUpperCase()===entityFilter.toUpperCase()))
     .map(t=>({...t,days:daysUntil(t.data)})).sort((a,b)=>a.days-b.days).slice(0,9);
   const alertCount=pending.filter(t=>t.days<=7).length;
   const cnt=document.getElementById('alert-cnt');
@@ -1883,7 +1909,7 @@ function renderUrgency(){
   area.className='urg-area';
 
   const f=getFiltered();
-  const pending=f.filter(t=>t&&t.tipo==='saida'&&!t.pago).sort((a,b)=>{
+  const pending=f.filter(t=>t&&t.tipo==='saida'&&!t.pago&&shouldShowPendingWatchItem(t)).sort((a,b)=>{
     const pa=parseDateParts(a.data), pb=parseDateParts(b.data);
     return new Date(pa.y,pa.m,pa.d)-new Date(pb.y,pb.m,pb.d);
   }).slice(0,9);
@@ -2027,7 +2053,8 @@ function renderTx(){
     const cbHtml=`<input type="checkbox" class="tx-cb" title="${cbTitle}" ${isSelected?'checked':''} onclick="toggleSelectTx(${txIdLiteral},event)">`;
     const actionsHtml=isEstimated
       ? `<div class="tx-status pendente" title="Previsto por recorrência aprovada"></div>
-          <button class="tx-edit" onclick="openEstimatedEditModal('${encodeURIComponent(t.id)}')" title="Editar previsão"><i class="fa-solid fa-pen"></i></button>`
+          <button class="tx-edit" onclick="openEstimatedEditModal('${encodeURIComponent(t.id)}')" title="Editar previsão"><i class="fa-solid fa-pen"></i></button>
+          <button class="tx-del" onclick="deleteTx(${txIdLiteral},event)" title="Remover previsão deste mês"><i class="fa-solid fa-trash"></i></button>`
       : `<div class="tx-status ${t.pago?'pago':'pendente'}" title="${t.pago?(t.tipo==='entrada'?'Recebido':'Pago'):'Pendente'}" onclick="togglePago(${txIdLiteral},event)" style="cursor:pointer"></div>
           <button class="tx-edit" onclick="openEditModal(${txIdLiteral})" title="Editar"><i class="fa-solid fa-pen"></i></button>
           <button class="tx-del" onclick="deleteTx(${txIdLiteral},event)"><i class="fa-solid fa-trash"></i></button>`;
@@ -2105,18 +2132,24 @@ async function bulkSetPago(pago){
 async function bulkDelete(){
   const ids = [...selectedTxIds];
   const realIds=ids.filter(id=>!String(id).startsWith('rec_est_'));
-  if(!realIds.length){
+  const estimates=getFiltered().filter(t=>t?.estimado&&ids.includes(String(t.id)));
+  if(!realIds.length&&!estimates.length){
     selectedTxIds.clear();
     renderTx();
-    toast('Previsões recorrentes não são excluídas aqui. Edite ou rejeite a recorrência para remover a previsão.', 'err');
+    toast('Nada selecionado para excluir.', 'err');
     return;
   }
-  if(!confirm(`Excluir ${realIds.length} transaç${realIds.length!==1?'ões':'ão'} selecionada${realIds.length!==1?'s':''}? Esta ação não pode ser desfeita.`)) return;
+  const parts=[];
+  if(realIds.length) parts.push(`${realIds.length} transaç${realIds.length!==1?'ões':'ão'} real${realIds.length!==1?'is':''}`);
+  if(estimates.length) parts.push(`${estimates.length} previsão${estimates.length!==1?'ões':' recorrente'}`);
+  if(!confirm(`Excluir ${parts.join(' e ')} selecionada${ids.length!==1?'s':''}? Transações reais serão apagadas permanentemente; previsões somem apenas deste mês.`)) return;
   txs = txs.filter(t=>!realIds.includes(String(t.id)));
+  estimates.forEach(suppressEstimatedTx);
+  if(estimates.length) saveRecurrenceDecisions();
   saveData(txs); selectedTxIds.clear(); renderAll();
-  const ignoredCount=ids.length-realIds.length;
-  const ignoredMsg=ignoredCount?` ${ignoredCount} previsão${ignoredCount!==1?'ões foram ignoradas':' foi ignorada'}.`:'';
-  toast(`${realIds.length} transaç${realIds.length!==1?'ões':'ão'} excluída${realIds.length!==1?'s':''}!${ignoredMsg}`,'ok');
+  const txMsg=realIds.length?`${realIds.length} transaç${realIds.length!==1?'ões':'ão'} excluída${realIds.length!==1?'s':''}`:'';
+  const estMsg=estimates.length?`${estimates.length} previsão${estimates.length!==1?'ões removidas':' removida'} deste mês`:'';
+  toast(`${[txMsg,estMsg].filter(Boolean).join(' e ')}!`,'ok');
   if(currentUser){
     setCloudStatus('syncing','Excluindo...');
     const cloudIds = realIds.filter(id=>!String(id).startsWith('temp_'));
@@ -2142,11 +2175,15 @@ async function togglePago(id,e){
 let _pendingDeleteId = null;
 
 function deleteTx(id, e){
-  e.stopPropagation();
+  if(e) e.stopPropagation();
   _pendingDeleteId = id;
-  const t = txs.find(x => String(x.id) === String(id));
+  const t = getFiltered().find(x => String(x.id) === String(id)) || txs.find(x => String(x.id) === String(id));
   const msgEl = document.getElementById('confirm-msg');
-  if(msgEl && t) msgEl.textContent = `"${t.nome || 'Transação'}" será excluída permanentemente.`;
+  if(msgEl && t){
+    msgEl.textContent = t.estimado
+      ? `"${t.nome || 'Previsão'}" será removida somente deste mês. A recorrência continua valendo para os próximos meses.`
+      : `"${t.nome || 'Transação'}" será excluída permanentemente.`;
+  }
   document.getElementById('confirm-overlay').classList.add('open');
 }
 
@@ -2160,6 +2197,17 @@ async function confirmDelete(){
   closeConfirm();
   if(id === null) return;
   const key=String(id);
+  if(key.startsWith('rec_est_')){
+    const estimated=getFiltered().find(t=>String(t.id)===key);
+    if(estimated&&suppressEstimatedTx(estimated)){
+      saveRecurrenceDecisions();
+      renderAll();
+      toast('Previsão removida deste mês.', 'ok');
+    } else {
+      toast('Previsão não encontrada.', 'err');
+    }
+    return;
+  }
   txs = txs.filter(x => String(x.id) !== key);
   saveData(txs); renderAll();
   toast('Transação excluída', 'ok');
