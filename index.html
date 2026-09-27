@@ -45,6 +45,8 @@
     .user-popover-info{flex:1;min-width:0;}
     .user-popover-name{font-size:13px;font-weight:700;color:var(--text);}
     .user-popover-email{font-size:11px;color:var(--text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+    .btn-popover-action{display:flex;align-items:center;gap:8px;width:100%;background:rgba(123,94,255,.12);border:1px solid rgba(123,94,255,.28);color:var(--primary-lt);padding:9px 12px;border-radius:8px;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:var(--t);margin-bottom:8px;}
+    .btn-popover-action:hover{background:rgba(123,94,255,.2);color:#fff;}
     .btn-logout-pop{display:flex;align-items:center;gap:8px;width:100%;background:var(--danger-bg);border:1px solid var(--danger-border);color:var(--danger);padding:9px 12px;border-radius:8px;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:var(--t);}
     .btn-logout-pop:hover{background:rgba(255,77,106,.22);}
   </style>
@@ -276,6 +278,14 @@
     .rec-summary-item{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:12px;}
     .rec-summary-lbl{font-size:10px;color:var(--text-sec);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;}
     .rec-summary-val{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;}
+    .rec-tools{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+    .rec-filter{display:flex;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap;}
+    .rec-filter-btn{background:none;border:none;color:var(--text-sec);font-family:'Inter',sans-serif;font-size:11px;font-weight:700;padding:7px 10px;border-radius:8px;cursor:pointer;transition:var(--t);white-space:nowrap;}
+    .rec-filter-btn.active{background:linear-gradient(135deg,var(--primary),var(--primary-dk));color:#fff;}
+    .rec-search{position:relative;min-width:220px;flex:1;max-width:330px;}
+    .rec-search i{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text-muted);}
+    .rec-search input{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:9px 12px 9px 32px;color:var(--text);font-family:'Inter',sans-serif;font-size:12px;outline:none;transition:var(--t);}
+    .rec-search input:focus{border-color:var(--primary);background:rgba(123,94,255,.07);}
     .rec-review-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-height:310px;overflow-y:auto;}
     .rec-candidate{display:flex;align-items:flex-start;gap:12px;padding:13px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid var(--border);transition:var(--t);}
     .rec-candidate:hover{background:rgba(255,255,255,.05);border-color:var(--border-bright);}
@@ -479,7 +489,9 @@
 /* Edit button */
 .tx-edit{background:rgba(123,94,255,.12);border:none;color:var(--primary-lt);width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;cursor:pointer;opacity:0;transition:var(--t);}
 .tx-item:hover .tx-edit{opacity:1;}
-.tx-edit:hover{background:rgba(123,94,255,.28);}
+    .tx-edit:hover{background:rgba(123,94,255,.28);}
+    .tx-item.estimated{border-style:dashed;background:rgba(255,184,0,.045);}
+    .tx-est-chip{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;padding:2px 6px;border-radius:999px;background:rgba(255,184,0,.13);border:1px dashed rgba(255,184,0,.45);color:var(--warning);text-transform:uppercase;}
   </style>
 </head>
 <body>
@@ -743,6 +755,7 @@
               <div class="user-popover-email" id="user-email-label">...</div>
             </div>
           </div>
+          <button class="btn-popover-action" onclick="scrollToRecurrenceReview();document.getElementById('user-pill').classList.remove('open')"><i class="fa-solid fa-rotate"></i> Recorrências detectadas</button>
           <button class="btn-logout-pop" onclick="authSignOut()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Sair da conta</button>
         </div>
       </div>
@@ -844,6 +857,18 @@
         <div class="rec-summary-item">
           <div class="rec-summary-lbl">Impacto mensal estimado</div>
           <div class="rec-summary-val" id="rec-impact-val">R$ 0</div>
+        </div>
+      </div>
+      <div class="rec-tools">
+        <div class="rec-filter">
+          <button class="rec-filter-btn active" id="rf-todos" onclick="setRecReviewFilter('todos')">Todos</button>
+          <button class="rec-filter-btn" id="rf-pending" onclick="setRecReviewFilter('pending')">Revisar</button>
+          <button class="rec-filter-btn" id="rf-approved" onclick="setRecReviewFilter('approved')">Aprovadas</button>
+          <button class="rec-filter-btn" id="rf-rejected" onclick="setRecReviewFilter('rejected')">Reprovadas</button>
+        </div>
+        <div class="rec-search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="rec-search-inp" placeholder="Buscar recorrência..." oninput="renderRecurringReview()">
         </div>
       </div>
       <div class="rec-review-list" id="rec-review-list">
@@ -1004,6 +1029,7 @@ let editingTxId = null;
 let txTypeFilter = 'todos';
 let catFilter = null;       // category key filter from clicking cat breakdown
 let selectedTxIds = new Set();
+let recReviewFilter = 'todos';
 let _applyingPrivacy = false;
 
 function setTxFilter(v){
@@ -1372,9 +1398,51 @@ function getPeriodRange(){
   return {y,m,days:daysInMonth(y,m),annual:false};
 }
 
+function monthKey(y,m){return `${y}-${String(m+1).padStart(2,'0')}`;}
+
+function estimateIdFor(key,y,m){
+  return `rec_est_${btoa(unescape(encodeURIComponent(key))).replace(/=+$/,'')}_${monthKey(y,m)}`;
+}
+
+function buildApprovedRecurringEstimatesForPeriod(y,m,annual=false){
+  const candidates=detectRecurringCandidates().filter(c=>c.status==='approved');
+  const estimates=[];
+  candidates.forEach(c=>{
+    const realItems=transactionsForRecurrenceKey(c.key);
+    if(!realItems.length) return;
+    const months=[...new Set(realItems.map(t=>parseDateParts(t.data).m))].sort((a,b)=>a-b);
+    const latestMonth=Math.max(...months);
+    const avgDay=Math.round(realItems.reduce((sum,t)=>sum+parseDateParts(t.data).d,0)/realItems.length)||1;
+    const monthsToCheck=annual ? Array.from({length:12-latestMonth-1},(_,i)=>latestMonth+1+i) : [m];
+    monthsToCheck.forEach(targetMonth=>{
+      if(targetMonth<=latestMonth || months.includes(targetMonth)) return;
+      const day=Math.min(avgDay,daysInMonth(y,targetMonth));
+      estimates.push({
+        id:estimateIdFor(c.key,y,targetMonth),
+        tipo:c.tipo,
+        entidade:c.entidade,
+        nome:c.nome,
+        valor:c.avgValue,
+        data:`${y}-${String(targetMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`,
+        categoria:c.categoria,
+        recorrente:c.recType||'mensal',
+        pago:false,
+        estimado:true,
+        recurrenceKey:c.key
+      });
+    });
+  });
+  return estimates;
+}
+
+function getTransactionsWithRecurringEstimates(){
+  const {y,m,annual}=getPeriodRange();
+  return [...txs, ...buildApprovedRecurringEstimatesForPeriod(y,m,annual)];
+}
+
 function getFiltered(){
   const {y,m,annual}=getPeriodRange();
-  return txs.filter(t=>{
+  return getTransactionsWithRecurringEstimates().filter(t=>{
     if(!t) return false;
     const { y: ty, m: tm } = parseDateParts(t.data);
     const inPeriod = annual ? (ty === y) : (ty === y && tm === m);
@@ -1504,7 +1572,9 @@ function renderKPIs(){
 // ALERTS
 // =============================================
 function renderAlerts(){
-  const pending=txs.filter(t=>t&&t.tipo==='saida'&&!t.pago&&(entityFilter==='todos'||(t.entidade||'CPF').toUpperCase()===entityFilter.toUpperCase()))
+  const {y,m}=getPeriodRange();
+  const alertBase=[...txs, ...buildApprovedRecurringEstimatesForPeriod(y,m,false)];
+  const pending=alertBase.filter(t=>t&&t.tipo==='saida'&&!t.pago&&(entityFilter==='todos'||(t.entidade||'CPF').toUpperCase()===entityFilter.toUpperCase()))
     .map(t=>({...t,days:daysUntil(t.data)})).sort((a,b)=>a.days-b.days).slice(0,9);
   const alertCount=pending.filter(t=>t.days<=7).length;
   const cnt=document.getElementById('alert-cnt');
@@ -1668,7 +1738,7 @@ function renderCashflowMonthly(ctx,W,H){
 function renderCashflowAnnual(ctx,W,H){
   const y=currentDate.getFullYear();
   const monthlyIn=new Array(12).fill(0), monthlyOut=new Array(12).fill(0);
-  txs.forEach(t=>{
+  getFiltered().forEach(t=>{
     if(!t||t.tipo==='pagamento-fatura') return;
     const { y: ty, m: tm } = parseDateParts(t.data);
     if(ty===y&&(entityFilter==='todos'||(t.entidade||'CPF').toUpperCase()===entityFilter.toUpperCase())){
@@ -1931,12 +2001,20 @@ function renderTx(){
     const nome=t.nome||'Sem descrição';
     const entidade=t.entidade||'CPF';
     const valor=parseFloat(t.valor)||0;
+    const isEstimated=!!t.estimado;
     const isSelected = selectedTxIds.has(t.id);
     const recBadge = t.recorrente==='mensal' ? '<span class="rec-badge mensal" title="Recorrente fixo mensal"><i class="fa-solid fa-rotate"></i></span>'
                    : t.recorrente==='variavel' ? '<span class="rec-badge variavel" title="Recorrente variável"><i class="fa-solid fa-wave-square"></i></span>'
                    : t.recorrente==='eventual' ? '<span class="rec-badge eventual" title="Eventual/irregular"><i class="fa-solid fa-calendar-days"></i></span>' : '';
-    return`<div class="tx-item ${isFatura?'fatura':''} ${isSelected?'selected':''}" data-id="${t.id}">
-      <input type="checkbox" class="tx-cb" ${isSelected?'checked':''} onchange="toggleSelectTx(${t.id},event)">
+    const estimateBadge=isEstimated?'<span class="tx-est-chip"><i class="fa-solid fa-wand-magic-sparkles"></i> Previsto</span>':'';
+    const cbHtml=isEstimated?'<input type="checkbox" class="tx-cb" disabled title="Previsão recorrente">' : `<input type="checkbox" class="tx-cb" ${isSelected?'checked':''} onchange="toggleSelectTx(${t.id},event)">`;
+    const actionsHtml=isEstimated
+      ? '<div class="tx-status pendente" title="Previsto por recorrência aprovada"></div>'
+      : `<div class="tx-status ${t.pago?'pago':'pendente'}" title="${t.pago?(t.tipo==='entrada'?'Recebido':'Pago'):'Pendente'}" onclick="togglePago(${t.id},event)" style="cursor:pointer"></div>
+          <button class="tx-edit" onclick="openEditModal(${t.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
+          <button class="tx-del" onclick="deleteTx(${t.id},event)"><i class="fa-solid fa-trash"></i></button>`;
+    return`<div class="tx-item ${isFatura?'fatura':''} ${isSelected?'selected':''} ${isEstimated?'estimated':''}" data-id="${escHtml(t.id)}">
+      ${cbHtml}
       <div class="tx-ico ${displayTipo}"><i class="fa-solid ${isFatura?'fa-credit-card':cat.ico}" style="color:${isFatura?'var(--transfer)':cat.cor}"></i></div>
       <div class="tx-info">
         <div class="tx-name">${nome}</div>
@@ -1945,14 +2023,13 @@ function renderTx(){
           <span class="badge ${entidade.toLowerCase()}">${entidade}</span>
           ${isFatura?'<span class="badge fatura">Transf. Fatura</span>':'<span class="badge cat">'+cat.lbl+'</span>'}
           ${recBadge}
+          ${estimateBadge}
         </div>
       </div>
       <div class="tx-right">
         <div class="tx-val ${displayTipo}">${valSign} ${R(valor)}</div>
         <div style="display:flex;align-items:center;gap:6px">
-          <div class="tx-status ${t.pago?'pago':'pendente'}" title="${t.pago?(t.tipo==='entrada'?'Recebido':'Pago'):'Pendente'}" onclick="togglePago(${t.id},event)" style="cursor:pointer"></div>
-          <button class="tx-edit" onclick="openEditModal(${t.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
-          <button class="tx-del" onclick="deleteTx(${t.id},event)"><i class="fa-solid fa-trash"></i></button>
+          ${actionsHtml}
         </div>
       </div>
     </div>`;
@@ -2647,6 +2724,15 @@ function resetDetectedRecurrence(encodedKey){
   toast('Padrão voltou para revisão.', 'ok');
 }
 
+function setRecReviewFilter(v){
+  recReviewFilter=v;
+  ['todos','pending','approved','rejected'].forEach(k=>{
+    const el=document.getElementById(`rf-${k}`);
+    if(el) el.classList.toggle('active',k===v);
+  });
+  renderRecurringReview();
+}
+
 function renderRecurringReview(){
   const list=document.getElementById('rec-review-list');
   if(!list) return;
@@ -2677,7 +2763,19 @@ function renderRecurringReview(){
     return;
   }
 
-  list.innerHTML=candidates.map(c=>{
+  const search=(document.getElementById('rec-search-inp')?.value||'').toLowerCase().trim();
+  const shown=candidates.filter(c=>{
+    const matchesStatus=recReviewFilter==='todos'||c.status===recReviewFilter;
+    const hay=[c.nome,c.entidade,c.cat?.lbl,c.recType,c.monthLabels].join(' ').toLowerCase();
+    return matchesStatus && (!search||hay.includes(search));
+  });
+
+  if(!shown.length){
+    list.innerHTML='<div class="empty-st" style="grid-column:1/-1;padding:22px"><i class="fa-solid fa-filter"></i><p>Nenhuma recorrência encontrada para o filtro aplicado.</p></div>';
+    return;
+  }
+
+  list.innerHTML=shown.map(c=>{
     const isApproved=c.status==='approved';
     const isRejected=c.status==='rejected';
     const statusLabel=isApproved?'Aprovada':isRejected?'Reprovada':'Revisar';
