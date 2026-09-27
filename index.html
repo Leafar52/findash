@@ -882,7 +882,7 @@
         </div>
         <div class="rec-search">
           <i class="fa-solid fa-magnifying-glass"></i>
-          <input type="text" id="rec-search-inp" placeholder="Buscar recorrência..." oninput="renderRecurringReview()">
+          <input type="text" id="rec-search-inp" placeholder="Buscar recorrência ou gasto..." oninput="renderRecurringReview()">
         </div>
       </div>
       <div class="rec-review-list" id="rec-review-list">
@@ -2886,15 +2886,17 @@ function detectRecurringCandidates(){
 
   const candidates=[];
   groups.forEach((items,key)=>{
+    const decision=recurrenceDecisions[key]||null;
     const monthSet=new Set(items.map(t=>parseDateParts(t.data).m));
-    if(monthSet.size<3) return;
+    const hasDecision=!!decision?.status;
+    if(monthSet.size<3&&!hasDecision) return;
 
     const sorted=[...items].sort((a,b)=>String(a.data).localeCompare(String(b.data)));
     const months=[...monthSet].sort((a,b)=>a-b);
     const gaps=months.slice(1).map((m,i)=>m-months[i]);
     const avgGap=gaps.length?gaps.reduce((a,b)=>a+b,0)/gaps.length:1;
     const monthlyLike=months.length>=3 && gaps.every(g=>g>=1&&g<=2);
-    if(!monthlyLike) return;
+    if(!monthlyLike&&!hasDecision) return;
 
     const monthlyTotals=months.map(month=>items
       .filter(t=>parseDateParts(t.data).m===month)
@@ -2906,7 +2908,6 @@ function detectRecurringCandidates(){
     const days=items.map(t=>parseDateParts(t.data).d);
     const daySpread=Math.max(...days)-Math.min(...days);
     const recType=devPct<=0.12?'mensal':'variavel';
-    const decision=recurrenceDecisions[key]||null;
     const approvedCount=items.filter(t=>t.recorrente==='mensal'||t.recorrente==='variavel').length;
     const rejectedCount=items.filter(t=>t.recorrente==='eventual').length;
     const inferredStatus=approvedCount>=Math.max(2,Math.ceil(items.length*.5))?'approved'
@@ -2966,6 +2967,72 @@ function transactionsForRecurrenceKey(key){
   return txs.filter(t=>recurrenceKeyForTx(t)===key);
 }
 
+function summarizeRecurrenceGroup(key,items){
+  if(!items.length) return null;
+  const sorted=[...items].sort((a,b)=>String(a.data).localeCompare(String(b.data)));
+  const monthSet=new Set(items.map(t=>parseDateParts(t.data).m));
+  const months=[...monthSet].sort((a,b)=>a-b);
+  const monthlyTotals=months.map(month=>items
+    .filter(t=>parseDateParts(t.data).m===month)
+    .reduce((sum,t)=>sum+(parseFloat(t.valor)||0),0)
+  ).filter(v=>v>0);
+  const detectedAvgValue=monthlyTotals.reduce((a,b)=>a+b,0)/Math.max(monthlyTotals.length,1);
+  const maxDev=monthlyTotals.reduce((mx,v)=>Math.max(mx,Math.abs(v-detectedAvgValue)),0);
+  const devPct=detectedAvgValue?maxDev/detectedAvgValue:0;
+  const first=sorted[0];
+  const decision=recurrenceDecisions[key]||null;
+  const recType=decision?.recType||(devPct<=0.12?'mensal':'variavel');
+  const multiplier=parseFloat(decision?.multiplier)||1;
+  const avgValue=detectedAvgValue*multiplier;
+  const cat=CATS[first.categoria]||CATS['outros-sai'];
+  const monthLabels=months.map(m=>MONTHS_SHORT[m]).join(', ');
+  return {
+    key,
+    nome:decision?.label||first.nome||'Sem descrição',
+    tipo:first.tipo,
+    entidade:first.entidade||'CPF',
+    categoria:first.categoria,
+    cat,
+    count:items.length,
+    monthsCount:months.length,
+    monthLabels,
+    avgValue,
+    detectedAvgValue,
+    multiplier,
+    annualTotal:items.reduce((a,t)=>a+(parseFloat(t.valor)||0),0),
+    recType,
+    confidence:Math.min(90,Math.round(35+Math.min(months.length,4)*10+(devPct<=0.12?15:6))),
+    status:decision?.status||'search',
+    approvedCount:items.filter(t=>t.recorrente==='mensal'||t.recorrente==='variavel').length,
+    searchResult:true
+  };
+}
+
+function searchTransactionsForRecurrence(search,candidateKeys=new Set()){
+  const q=String(search||'').toLowerCase().trim();
+  if(q.length<2) return [];
+  const year=currentDate.getFullYear();
+  const groups=new Map();
+  txs.forEach(t=>{
+    if(!t||!['entrada','saida'].includes(t.tipo)) return;
+    const parts=parseDateParts(t.data);
+    if(parts.y!==year) return;
+    if(entityFilter!=='todos'&&(t.entidade||'CPF').toUpperCase()!==entityFilter.toUpperCase()) return;
+    const cat=CATS[t.categoria]||{};
+    const hay=[t.nome,t.entidade,cat.lbl,t.tipo,t.recorrente,normalizeRecurringName(t.nome)].join(' ').toLowerCase();
+    if(!hay.includes(q)&&!normalizeRecurringName(t.nome).includes(normalizeRecurringName(q))) return;
+    const key=recurrenceKeyForTx(t);
+    if(!key||candidateKeys.has(key)) return;
+    if(!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(t);
+  });
+  return [...groups.entries()]
+    .map(([key,items])=>summarizeRecurrenceGroup(key,items))
+    .filter(Boolean)
+    .sort((a,b)=>b.monthsCount-a.monthsCount||b.count-a.count||b.annualTotal-a.annualTotal)
+    .slice(0,8);
+}
+
 function markRecurrenceForKey(key,recType){
   const changed=[];
   txs=txs.map(t=>{
@@ -2990,7 +3057,7 @@ async function syncRecurrenceChanges(changed,label){
 
 async function approveDetectedRecurrence(encodedKey,recType){
   const key=decodeURIComponent(encodedKey);
-  const candidate=detectRecurringCandidates().find(c=>c.key===key);
+  const candidate=detectRecurringCandidates().find(c=>c.key===key)||summarizeRecurrenceGroup(key,transactionsForRecurrenceKey(key));
   recurrenceDecisions[key]={
     status:'approved',
     recType:recType||candidate?.recType||'mensal',
@@ -3007,7 +3074,7 @@ async function approveDetectedRecurrence(encodedKey,recType){
 
 async function rejectDetectedRecurrence(encodedKey){
   const key=decodeURIComponent(encodedKey);
-  const candidate=detectRecurringCandidates().find(c=>c.key===key);
+  const candidate=detectRecurringCandidates().find(c=>c.key===key)||summarizeRecurrenceGroup(key,transactionsForRecurrenceKey(key));
   recurrenceDecisions[key]={
     status:'rejected',
     recType:'unica',
@@ -3066,27 +3133,31 @@ function renderRecurringReview(){
     impactVal.style.color=impact>=0?'var(--success)':'var(--danger)';
   }
 
-  if(!candidates.length){
+  const search=(document.getElementById('rec-search-inp')?.value||'').toLowerCase().trim();
+  const candidateKeys=new Set(candidates.map(c=>c.key));
+  const txMatches=searchTransactionsForRecurrence(search,candidateKeys);
+
+  if(!candidates.length&&!search){
     list.innerHTML='<div class="empty-st" style="grid-column:1/-1;padding:22px"><i class="fa-solid fa-rotate"></i><p>Nenhum padrão recorrente identificado ainda.<br>Quando o mesmo cliente, aluguel ou assinatura aparecer em 3 meses, ele surge aqui para revisão.</p></div>';
     return;
   }
 
-  const search=(document.getElementById('rec-search-inp')?.value||'').toLowerCase().trim();
   const shown=candidates.filter(c=>{
     const matchesStatus=recReviewFilter==='todos'||c.status===recReviewFilter;
     const hay=[c.nome,c.entidade,c.cat?.lbl,c.recType,c.monthLabels].join(' ').toLowerCase();
     return matchesStatus && (!search||hay.includes(search));
   });
 
-  if(!shown.length){
-    list.innerHTML='<div class="empty-st" style="grid-column:1/-1;padding:22px"><i class="fa-solid fa-filter"></i><p>Nenhuma recorrência encontrada para o filtro aplicado.</p></div>';
+  if(!shown.length&&!txMatches.length){
+    list.innerHTML='<div class="empty-st" style="grid-column:1/-1;padding:22px"><i class="fa-solid fa-filter"></i><p>Nenhuma recorrência ou gasto encontrado para a busca aplicada.</p></div>';
     return;
   }
 
-  list.innerHTML=shown.map(c=>{
+  const renderRecCard=(c,fromSearch=false)=>{
     const isApproved=c.status==='approved';
     const isRejected=c.status==='rejected';
-    const statusLabel=isApproved?'Aprovada':isRejected?'Reprovada':'Revisar';
+    const isSearch=fromSearch&&!isApproved&&!isRejected;
+    const statusLabel=isApproved?'Aprovada':isRejected?'Reprovada':isSearch?'Encontrado':'Revisar';
     const statusCls=isApproved?'approved':isRejected?'rejected':'pending';
     const recLabel=c.recType==='mensal'?'Valor fixo':'Valor variável';
     const sign=c.tipo==='entrada'?'+':'-';
@@ -3095,7 +3166,7 @@ function renderRecurringReview(){
       ? `<button class="rec-action-btn neu" onclick="resetDetectedRecurrence('${encoded}')"><i class="fa-solid fa-rotate-left"></i> Revisar novamente</button>`
       : isApproved
         ? `<button class="rec-action-btn no" onclick="rejectDetectedRecurrence('${encoded}')"><i class="fa-solid fa-ban"></i> Remover regra</button>`
-        : `<button class="rec-action-btn ok" onclick="approveDetectedRecurrence('${encoded}','${c.recType}')"><i class="fa-solid fa-check"></i> Aprovar</button><button class="rec-action-btn no" onclick="rejectDetectedRecurrence('${encoded}')"><i class="fa-solid fa-xmark"></i> Reprovar</button>`;
+        : `<button class="rec-action-btn ok" onclick="approveDetectedRecurrence('${encoded}','${c.recType}')"><i class="fa-solid fa-check"></i> ${isSearch?'Marcar recorrente':'Aprovar'}</button><button class="rec-action-btn no" onclick="rejectDetectedRecurrence('${encoded}')"><i class="fa-solid fa-xmark"></i> ${isSearch?'Ignorar':'Reprovar'}</button>`;
     return `<div class="rec-candidate ${statusCls}">
       <div class="rec-detect-icon ${c.tipo}"><i class="fa-solid ${c.tipo==='entrada'?'fa-hand-holding-dollar':c.cat.ico}"></i></div>
       <div class="rec-detect-main">
@@ -3111,7 +3182,15 @@ function renderRecurringReview(){
         <div class="rec-actions">${actions}</div>
       </div>
     </div>`;
-  }).join('');
+  };
+
+  const sections=[];
+  if(shown.length) sections.push(shown.map(c=>renderRecCard(c,false)).join(''));
+  if(txMatches.length){
+    sections.push(`<div style="grid-column:1/-1;color:var(--text-sec);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;margin:4px 0 -2px;">Gastos encontrados na busca</div>`);
+    sections.push(txMatches.map(c=>renderRecCard(c,true)).join(''));
+  }
+  list.innerHTML=sections.join('');
 }
 
 function calcularMediaMovel(nome, tipo='saida', n=3){
