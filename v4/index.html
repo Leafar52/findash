@@ -242,6 +242,20 @@
     .urg-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);}
     .uleg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-sec);}
     .uleg-dot{width:6px;height:6px;border-radius:50%;}
+    .commit-area{margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    .commit-box{background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:10px;padding:11px;min-width:0;}
+    .commit-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
+    .commit-title{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800;color:var(--text);white-space:nowrap;}
+    .commit-total{font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--primary-lt);white-space:nowrap;}
+    .commit-list{display:flex;flex-direction:column;gap:6px;max-height:120px;overflow-y:auto;}
+    .commit-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;background:rgba(255,255,255,.025);}
+    .commit-ico{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:10px;flex:0 0 24px;background:rgba(123,94,255,.12);color:var(--primary-lt);}
+    .commit-info{flex:1;min-width:0;}
+    .commit-name{font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .commit-meta{font-size:9px;color:var(--text-sec);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .commit-val{font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--danger);white-space:nowrap;}
+    .commit-empty{font-size:11px;color:var(--text-muted);padding:8px 0;line-height:1.5;}
+    @media(max-width:720px){.commit-area{grid-template-columns:1fr;}}
     /* Category breakdown (annual view) */
     .cat-breakdown{display:flex;flex-direction:column;gap:8px;margin-top:14px;max-height:240px;overflow-y:auto;}
     .cat-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:rgba(255,255,255,.02);border:1px solid transparent;transition:var(--t);}
@@ -916,6 +930,22 @@
         <div class="uleg"><div class="uleg-dot" style="background:var(--orange)"></div> Crítico (≤3d)</div>
         <div class="uleg"><div class="uleg-dot" style="background:var(--danger)"></div> Atrasado</div>
       </div>
+      <div class="commit-area" id="commit-area">
+        <div class="commit-box">
+          <div class="commit-head">
+            <div class="commit-title"><i class="fa-solid fa-layer-group"></i> Parcelas do mês</div>
+            <div class="commit-total" id="installments-total">R$ 0,00</div>
+          </div>
+          <div class="commit-list" id="installments-list"></div>
+        </div>
+        <div class="commit-box">
+          <div class="commit-head">
+            <div class="commit-title"><i class="fa-solid fa-repeat"></i> Mensalidades</div>
+            <div class="commit-total" id="subscriptions-total">R$ 0,00</div>
+          </div>
+          <div class="commit-list" id="subscriptions-list"></div>
+        </div>
+      </div>
     </div>
 
     <div class="bottom-resizer" id="bottom-resizer" role="separator" aria-orientation="vertical" aria-label="Redimensionar painel de transações"></div>
@@ -1187,7 +1217,7 @@ function applyPrivacy(){
       if(el) el.classList.toggle('privacy-blur', privacyMode);
     });
     // Transaction list names and values
-    document.querySelectorAll('.tx-name,.tx-val,.al-name,.al-val,.al-date').forEach(el=>{
+    document.querySelectorAll('.tx-name,.tx-val,.al-name,.al-val,.al-date,.commit-name,.commit-val,.commit-total').forEach(el=>{
       el.classList.toggle('privacy-blur', privacyMode);
     });
     // Category breakdown values
@@ -1507,6 +1537,33 @@ function daysUntil(s){
 
 function shouldShowPendingWatchItem(t){
   return daysUntil(t?.data) >= -30;
+}
+
+function extractInstallmentInfo(nome){
+  const text=String(nome||'');
+  let m=text.match(/\b(\d{1,2})\s*\/\s*(\d{1,2})\b/);
+  if(!m) m=text.match(/\b(?:parcela|parc\.?)\s*(\d{1,2})\s*(?:de|\/)\s*(\d{1,2})\b/i);
+  if(!m) return null;
+  const current=parseInt(m[1],10);
+  const total=parseInt(m[2],10);
+  if(!current||!total||total<2||total>60||current<1||current>total) return null;
+  return {current,total};
+}
+
+function cleanInstallmentName(nome){
+  return String(nome||'Sem descrição')
+    .replace(/\b(?:parcela|parc\.?)\s*\d{1,2}\s*(?:de|\/)\s*\d{1,2}\b/ig,'')
+    .replace(/\b\d{1,2}\s*\/\s*\d{1,2}\b/g,'')
+    .replace(/\s+/g,' ')
+    .trim()||'Sem descrição';
+}
+
+function isSubscriptionLike(t){
+  if(!t||t.tipo!=='saida') return false;
+  if(t.recorrente==='mensal'||t.recorrente==='variavel'||t.estimado) return true;
+  const name=normalizeRecurringName(t.nome);
+  const hay=`${name} ${t.categoria||''}`;
+  return /\b(netflix|spotify|livelo|prime|amazon|disney|max|hbo|youtube|google|apple|icloud|microsoft|adobe|canva|notion|openai|chatgpt|capcut|dropbox|icloud|assinatura|mensalidade|plano|premium|saas|software|app)\b/.test(hay);
 }
 
 function getPeriodRange(){
@@ -2052,7 +2109,7 @@ function renderCashflowAnnual(ctx,W,H){
 function renderUrgency(){
   const area=document.getElementById('urg-area');
   if(!area) return;
-  if(viewMode==='anual'){renderCategoryBreakdown();return;}
+  if(viewMode==='anual'){renderCategoryBreakdown();renderCommitments();return;}
   const toggle=document.getElementById('urg-toggle');
   const legend=document.getElementById('urg-legend');
   if(toggle) toggle.style.display='flex';
@@ -2069,6 +2126,7 @@ function renderUrgency(){
   
   if(!pending.length){
     area.innerHTML='<div style="margin:auto;text-align:center;color:var(--text-muted);font-size:12px;padding:24px 0;">✅ Sem contas pendentes este período!</div>';
+    renderCommitments();
     return;
   }
   const maxVal=Math.max(...pending.map(t=>parseFloat(t.valor)||1));
@@ -2093,6 +2151,58 @@ function renderUrgency(){
     area.appendChild(col);
   });
   setTimeout(()=>{area.querySelectorAll('.urg-fill').forEach(el=>{el.style.height=el.dataset.h+'%';});},40);
+  renderCommitments();
+}
+
+function renderCommitments(){
+  const wrap=document.getElementById('commit-area');
+  if(!wrap) return;
+  if(viewMode==='anual'){wrap.style.display='none';return;}
+  wrap.style.display='grid';
+  const f=getFiltered().filter(t=>t&&t.tipo==='saida'&&!t.pago&&shouldShowPendingWatchItem(t));
+  const installments=f
+    .map(t=>({...t,installment:extractInstallmentInfo(t.nome)}))
+    .filter(t=>t.installment)
+    .sort((a,b)=>daysUntil(a.data)-daysUntil(b.data))
+    .slice(0,6);
+  const installmentIds=new Set(installments.map(t=>String(t.id)));
+  const subscriptions=f
+    .filter(t=>!installmentIds.has(String(t.id))&&isSubscriptionLike(t))
+    .sort((a,b)=>daysUntil(a.data)-daysUntil(b.data))
+    .slice(0,6);
+  const renderList=(items,type)=>{
+    if(!items.length){
+      return `<div class="commit-empty">${type==='installment'?'Nenhuma parcela pendente identificada neste mês.':'Nenhuma mensalidade pendente identificada neste mês.'}</div>`;
+    }
+    return items.map(t=>{
+      const cat=CATS[t.categoria]||CATS['outros-sai']||{ico:'fa-box',lbl:'Outros',cor:'#94A3B8'};
+      const days=daysUntil(t.data);
+      const due=days<0?`${Math.abs(days)}d atraso`:days===0?'hoje':`${days}d`;
+      const meta=type==='installment'
+        ? `Parcela ${t.installment.current}/${t.installment.total} · ${due}`
+        : `${(t.recorrente==='mensal'||t.recorrente==='variavel'||t.estimado)?'Recorrente':'Mensalidade'} · ${due}`;
+      const icon=type==='installment'?'fa-layer-group':cat.ico;
+      return `<div class="commit-item">
+        <div class="commit-ico"><i class="fa-solid ${icon}" style="color:${cat.cor||'var(--primary-lt)'}"></i></div>
+        <div class="commit-info">
+          <div class="commit-name">${escHtml(type==='installment'?cleanInstallmentName(t.nome):t.nome||'Sem descrição')}</div>
+          <div class="commit-meta">${escHtml(meta)}</div>
+        </div>
+        <div class="commit-val">${R(parseFloat(t.valor)||0)}</div>
+      </div>`;
+    }).join('');
+  };
+  const installmentTotal=installments.reduce((s,t)=>s+(parseFloat(t.valor)||0),0);
+  const subscriptionTotal=subscriptions.reduce((s,t)=>s+(parseFloat(t.valor)||0),0);
+  const instTotalEl=document.getElementById('installments-total');
+  const subTotalEl=document.getElementById('subscriptions-total');
+  if(instTotalEl) instTotalEl.textContent=R(installmentTotal);
+  if(subTotalEl) subTotalEl.textContent=R(subscriptionTotal);
+  const instList=document.getElementById('installments-list');
+  const subList=document.getElementById('subscriptions-list');
+  if(instList) instList.innerHTML=renderList(installments,'installment');
+  if(subList) subList.innerHTML=renderList(subscriptions,'subscription');
+  applyPrivacy();
 }
 
 function renderCategoryBreakdown(){
