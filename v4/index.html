@@ -1583,6 +1583,44 @@ function estimateIdFor(key,y,m){
   return `rec_est_${btoa(unescape(encodeURIComponent(key))).replace(/=+$/,'')}_${monthKey(y,m)}`;
 }
 
+function installmentEstimateIdFor(key,n,y,m){
+  return `inst_est_${btoa(unescape(encodeURIComponent(key))).replace(/=+$/,'')}_${n}_${monthKey(y,m)}`;
+}
+
+function installmentSeriesKey(t,info=extractInstallmentInfo(t?.nome)){
+  if(!t||!info) return '';
+  const base=normalizeRecurringName(cleanInstallmentName(t.nome));
+  if(!base) return '';
+  return [
+    t.tipo||'saida',
+    (t.entidade||'CPF').toUpperCase(),
+    t.categoria||'outros-sai',
+    info.total,
+    Math.round((parseFloat(t.valor)||0)*100),
+    base
+  ].join('|');
+}
+
+function addMonthsToDate(dateStr,offset){
+  const {y,m,d}=parseDateParts(dateStr);
+  const target=new Date(y,m+offset,1);
+  const ty=target.getFullYear();
+  const tm=target.getMonth();
+  const td=Math.min(d,daysInMonth(ty,tm));
+  return {y:ty,m:tm,d:td,date:`${ty}-${String(tm+1).padStart(2,'0')}-${String(td).padStart(2,'0')}`};
+}
+
+function hasRealInstallmentFor(seriesKey,installmentNumber,y,m){
+  return txs.some(t=>{
+    if(!t||t.estimado) return false;
+    const info=extractInstallmentInfo(t.nome);
+    if(!info||info.current!==installmentNumber) return false;
+    if(installmentSeriesKey(t,info)!==seriesKey) return false;
+    const parts=parseDateParts(t.data);
+    return parts.y===y&&parts.m===m;
+  });
+}
+
 function isEstimatedSuppressed(key,y,m){
   const suppressed=recurrenceDecisions[key]?.suppressedMonths||[];
   return suppressed.includes(monthKey(y,m));
@@ -1690,9 +1728,47 @@ function buildApprovedRecurringEstimatesForPeriod(y,m,annual=false){
   return estimates;
 }
 
+function buildInstallmentEstimatesForPeriod(y,m,annual=false){
+  const estimates=[];
+  const seen=new Set();
+  txs.forEach(t=>{
+    if(!t||t.estimado||t.tipo!=='saida') return;
+    const info=extractInstallmentInfo(t.nome);
+    if(!info||info.current>=info.total) return;
+    const seriesKey=installmentSeriesKey(t,info);
+    if(!seriesKey) return;
+    const baseName=cleanInstallmentName(t.nome);
+    for(let n=info.current+1;n<=info.total;n++){
+      const target=addMonthsToDate(t.data,n-info.current);
+      if(target.y!==y) continue;
+      if(!annual&&target.m!==m) continue;
+      if(hasRealInstallmentFor(seriesKey,n,target.y,target.m)) continue;
+      const estimateKey=`${seriesKey}|${n}|${monthKey(target.y,target.m)}`;
+      if(seen.has(estimateKey)) continue;
+      seen.add(estimateKey);
+      estimates.push({
+        id:installmentEstimateIdFor(seriesKey,n,target.y,target.m),
+        tipo:'saida',
+        entidade:t.entidade||'CPF',
+        nome:`${baseName} (Parcela ${String(n).padStart(2,'0')} de ${String(info.total).padStart(2,'0')})`,
+        valor:parseFloat(t.valor)||0,
+        data:target.date,
+        categoria:t.categoria||'outros-sai',
+        recorrente:'unica',
+        pago:false,
+        estimado:true,
+        installmentEstimate:true,
+        installment:{current:n,total:info.total},
+        installmentSeriesKey:seriesKey
+      });
+    }
+  });
+  return estimates;
+}
+
 function getTransactionsWithRecurringEstimates(){
   const {y,m,annual}=getPeriodRange();
-  return [...txs, ...buildApprovedRecurringEstimatesForPeriod(y,m,annual)];
+  return [...txs, ...buildApprovedRecurringEstimatesForPeriod(y,m,annual), ...buildInstallmentEstimatesForPeriod(y,m,annual)];
 }
 
 function getFiltered(){
@@ -2311,17 +2387,24 @@ function renderTx(){
     const entidade=t.entidade||'CPF';
     const valor=parseFloat(t.valor)||0;
     const isEstimated=!!t.estimado;
+    const isInstallmentEstimate=!!t.installmentEstimate;
     const txIdKey=String(t.id);
     const isSelected = selectedTxIds.has(txIdKey);
     const txIdAttr=escHtml(txIdKey);
     const recBadge = t.recorrente==='mensal' ? '<span class="rec-badge mensal" title="Recorrente fixo mensal"><i class="fa-solid fa-rotate"></i></span>'
                    : t.recorrente==='variavel' ? '<span class="rec-badge variavel" title="Recorrente variável"><i class="fa-solid fa-wave-square"></i></span>'
                    : t.recorrente==='eventual' ? '<span class="rec-badge eventual" title="Eventual/irregular"><i class="fa-solid fa-calendar-days"></i></span>' : '';
-    const estimateBadge=isEstimated?'<span class="tx-est-chip"><i class="fa-solid fa-wand-magic-sparkles"></i> Previsto</span>':'';
-    const cbTitle=isEstimated?'Selecionar previsão recorrente':'Selecionar transação';
-    const cbHtml=`<input type="checkbox" class="tx-cb" title="${cbTitle}" ${isSelected?'checked':''} data-tx-action="select" data-tx-id="${txIdAttr}">`;
+    const estimateBadge=isEstimated
+      ? `<span class="tx-est-chip"><i class="fa-solid ${isInstallmentEstimate?'fa-layer-group':'fa-wand-magic-sparkles'}"></i> ${isInstallmentEstimate?'Parcela prevista':'Previsto'}</span>`
+      : '';
+    const cbTitle=isInstallmentEstimate?'Previsão de parcela':isEstimated?'Selecionar previsão recorrente':'Selecionar transação';
+    const cbHtml=isInstallmentEstimate
+      ? `<input type="checkbox" class="tx-cb" title="${cbTitle}" disabled>`
+      : `<input type="checkbox" class="tx-cb" title="${cbTitle}" ${isSelected?'checked':''} data-tx-action="select" data-tx-id="${txIdAttr}">`;
     const actionsHtml=isEstimated
-      ? `<div class="tx-status pendente" title="Previsto por recorrência aprovada"></div>
+      ? isInstallmentEstimate
+        ? `<div class="tx-status pendente" title="Parcela futura prevista"></div>`
+        : `<div class="tx-status pendente" title="Previsto por recorrência aprovada"></div>
           <button type="button" class="tx-edit" data-tx-action="edit-estimated" data-tx-id="${txIdAttr}" title="Editar previsão"><i class="fa-solid fa-pen"></i></button>
           <button type="button" class="tx-del" data-tx-action="delete" data-tx-id="${txIdAttr}" title="Remover previsão deste mês"><i class="fa-solid fa-trash"></i></button>`
       : `<div class="tx-status ${t.pago?'pago':'pendente'}" title="${t.pago?(t.tipo==='entrada'?'Recebido':'Pago'):'Pendente'}" data-tx-action="toggle-paid" data-tx-id="${txIdAttr}" style="cursor:pointer"></div>
