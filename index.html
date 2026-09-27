@@ -1005,6 +1005,7 @@ REGRAS:
 • "valor": sempre positivo (número decimal, ex: 95.50)
 • "pago": true (pois já constam no extrato)
 • "recorrente": sempre "unica"; o dashboard detecta padrões recorrentes depois e pede aprovação do usuário
+• Se a descrição original tiver aspas, remova as aspas internas ou escape como \\" dentro do campo "nome"; nunca use aspas cruas dentro de uma string JSON
 
 RETORNE APENAS o array JSON puro, sem explicações, sem markdown, sem texto adicional.
 
@@ -2691,6 +2692,39 @@ function copyPrompt(){
   }).catch(()=>{toast('Não foi possível copiar. Selecione manualmente.','err');});
 }
 
+function cleanJsonPaste(raw){
+  let text=String(raw||'').replace(/^\uFEFF/,'').trim();
+  text=text.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'').trim();
+  const first=text.indexOf('[');
+  const last=text.lastIndexOf(']');
+  if(first!==-1&&last!==-1&&last>first) text=text.slice(first,last+1).trim();
+  return text;
+}
+
+function repairImportedJson(text){
+  let repaired=cleanJsonPaste(text);
+  let changed=repaired!==String(text||'').trim();
+  repaired=repaired.replace(/("nome"\s*:\s*")([\s\S]*?)("\s*,\s*"valor"\s*:)/g,(match,start,value,end)=>{
+    const fixed=value.replace(/(^|[^\\])"/g,'$1\\"');
+    if(fixed!==value) changed=true;
+    return start+fixed+end;
+  });
+  return {text:repaired,changed};
+}
+
+function parseImportedJson(raw){
+  const cleaned=cleanJsonPaste(raw);
+  try{return {data:JSON.parse(cleaned),repaired:cleaned!==String(raw||'').trim()};}
+  catch(firstError){
+    const fixed=repairImportedJson(raw);
+    if(fixed.changed){
+      try{return {data:JSON.parse(fixed.text),repaired:true};}
+      catch(e){}
+    }
+    throw firstError;
+  }
+}
+
 function parseAndPreview(){
   const raw=document.getElementById('json-input').value.trim();
   const errEl=document.getElementById('json-error');
@@ -2698,8 +2732,18 @@ function parseAndPreview(){
   errEl.style.display='none';
   if(!raw){errMsg.textContent='Cole o JSON antes de continuar.';errEl.style.display='flex';return;}
   let parsed;
-  try{parsed=JSON.parse(raw);}catch(e){errMsg.textContent='JSON inválido: '+e.message;errEl.style.display='flex';return;}
+  let repaired=false;
+  try{
+    const result=parseImportedJson(raw);
+    parsed=result.data;
+    repaired=!!result.repaired;
+  }catch(e){
+    errMsg.textContent='JSON inválido: '+e.message+' Dica: se houver aspas dentro de "nome", remova-as ou use \\".';
+    errEl.style.display='flex';
+    return;
+  }
   if(!Array.isArray(parsed)||!parsed.length){errMsg.textContent='O JSON deve ser um array com pelo menos 1 transação.';errEl.style.display='flex';return;}
+  if(repaired) toast('Corrigi automaticamente o JSON colado antes da pré-visualização.', 'ok');
   // Validate & normalize
   const valid=[],invalid=[];
   parsed.forEach((t,i)=>{
