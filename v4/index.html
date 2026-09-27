@@ -2016,19 +2016,21 @@ function renderTx(){
     const entidade=t.entidade||'CPF';
     const valor=parseFloat(t.valor)||0;
     const isEstimated=!!t.estimado;
-    const isSelected = selectedTxIds.has(t.id);
+    const txIdKey=String(t.id);
+    const txIdLiteral=JSON.stringify(txIdKey);
+    const isSelected = selectedTxIds.has(txIdKey);
     const recBadge = t.recorrente==='mensal' ? '<span class="rec-badge mensal" title="Recorrente fixo mensal"><i class="fa-solid fa-rotate"></i></span>'
                    : t.recorrente==='variavel' ? '<span class="rec-badge variavel" title="Recorrente variável"><i class="fa-solid fa-wave-square"></i></span>'
                    : t.recorrente==='eventual' ? '<span class="rec-badge eventual" title="Eventual/irregular"><i class="fa-solid fa-calendar-days"></i></span>' : '';
     const estimateBadge=isEstimated?'<span class="tx-est-chip"><i class="fa-solid fa-wand-magic-sparkles"></i> Previsto</span>':'';
-    const cbHtml=isEstimated?'<input type="checkbox" class="tx-cb" disabled title="Previsão recorrente">' : `<input type="checkbox" class="tx-cb" ${isSelected?'checked':''} onchange="toggleSelectTx(${t.id},event)">`;
+    const cbHtml=isEstimated?'<input type="checkbox" class="tx-cb" disabled title="Previsão recorrente">' : `<input type="checkbox" class="tx-cb" ${isSelected?'checked':''} onclick="toggleSelectTx(${txIdLiteral},event)">`;
     const actionsHtml=isEstimated
       ? `<div class="tx-status pendente" title="Previsto por recorrência aprovada"></div>
           <button class="tx-edit" onclick="openEstimatedEditModal('${encodeURIComponent(t.id)}')" title="Editar previsão"><i class="fa-solid fa-pen"></i></button>`
-      : `<div class="tx-status ${t.pago?'pago':'pendente'}" title="${t.pago?(t.tipo==='entrada'?'Recebido':'Pago'):'Pendente'}" onclick="togglePago(${t.id},event)" style="cursor:pointer"></div>
-          <button class="tx-edit" onclick="openEditModal(${t.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
-          <button class="tx-del" onclick="deleteTx(${t.id},event)"><i class="fa-solid fa-trash"></i></button>`;
-    return`<div class="tx-item ${isFatura?'fatura':''} ${isSelected?'selected':''} ${isEstimated?'estimated':''}" data-id="${escHtml(t.id)}">
+      : `<div class="tx-status ${t.pago?'pago':'pendente'}" title="${t.pago?(t.tipo==='entrada'?'Recebido':'Pago'):'Pendente'}" onclick="togglePago(${txIdLiteral},event)" style="cursor:pointer"></div>
+          <button class="tx-edit" onclick="openEditModal(${txIdLiteral})" title="Editar"><i class="fa-solid fa-pen"></i></button>
+          <button class="tx-del" onclick="deleteTx(${txIdLiteral},event)"><i class="fa-solid fa-trash"></i></button>`;
+    return`<div class="tx-item ${isFatura?'fatura':''} ${isSelected?'selected':''} ${isEstimated?'estimated':''}" data-id="${escHtml(txIdKey)}">
       ${cbHtml}
       <div class="tx-ico ${displayTipo}"><i class="fa-solid ${isFatura?'fa-credit-card':cat.ico}" style="color:${isFatura?'var(--transfer)':cat.cor}"></i></div>
       <div class="tx-info">
@@ -2054,12 +2056,12 @@ function renderTx(){
 }
 
 function toggleSelectTx(id, e){
-  e.stopPropagation();
-  if(selectedTxIds.has(id)) selectedTxIds.delete(id);
-  else selectedTxIds.add(id);
-  // Update visual state without full re-render
-  const item = document.querySelector(`.tx-item[data-id="${id}"]`);
-  if(item) item.classList.toggle('selected', selectedTxIds.has(id));
+  if(e) e.stopPropagation();
+  const key=String(id);
+  if(selectedTxIds.has(key)) selectedTxIds.delete(key);
+  else selectedTxIds.add(key);
+  const item = e?.target?.closest?.('.tx-item') || document.querySelector(`.tx-item[data-id="${CSS.escape(key)}"]`);
+  if(item) item.classList.toggle('selected', selectedTxIds.has(key));
   _updateBulkBar();
 }
 
@@ -2075,14 +2077,15 @@ function _updateBulkBar(){
 async function bulkSetPago(pago){
   const ids = [...selectedTxIds];
   ids.forEach(id=>{
-    const t = txs.find(x=>x.id===id);
+    const t = txs.find(x=>String(x.id)===String(id));
     if(t) t.pago = pago;
   });
   saveData(txs); selectedTxIds.clear(); renderAll();
   toast(`${ids.length} transaç${ids.length!==1?'ões':'ão'} marcada${ids.length!==1?'s':''} como ${pago?'pagas':'pendentes'}!`,'ok');
   if(currentUser){
     setCloudStatus('syncing','Atualizando...');
-    await Promise.all(ids.filter(id=>typeof id==='number').map(id=>
+    const cloudIds=ids.filter(id=>!String(id).startsWith('temp_')&&!String(id).startsWith('rec_est_'));
+    await Promise.all(cloudIds.map(id=>
       sb.from('transacoes').update({pago}).eq('id',id).eq('user_id',currentUser.id)
     ));
     setCloudStatus('online','Nuvem OK');
@@ -2092,25 +2095,26 @@ async function bulkSetPago(pago){
 async function bulkDelete(){
   const ids = [...selectedTxIds];
   if(!confirm(`Excluir ${ids.length} transaç${ids.length!==1?'ões':'ão'} selecionada${ids.length!==1?'s':''}? Esta ação não pode ser desfeita.`)) return;
-  txs = txs.filter(t=>!ids.includes(t.id));
+  txs = txs.filter(t=>!ids.includes(String(t.id)));
   saveData(txs); selectedTxIds.clear(); renderAll();
   toast(`${ids.length} transaç${ids.length!==1?'ões':'ão'} excluída${ids.length!==1?'s':''}!`,'ok');
   if(currentUser){
     setCloudStatus('syncing','Excluindo...');
-    const numIds = ids.filter(id=>typeof id==='number');
-    if(numIds.length) await sb.from('transacoes').delete().in('id',numIds).eq('user_id',currentUser.id);
+    const cloudIds = ids.filter(id=>!String(id).startsWith('temp_')&&!String(id).startsWith('rec_est_'));
+    if(cloudIds.length) await sb.from('transacoes').delete().in('id',cloudIds).eq('user_id',currentUser.id);
     setCloudStatus('online','Nuvem OK');
   }
 }
 
 async function togglePago(id,e){
   e.stopPropagation();
-  const t=txs.find(x=>x.id===id);
+  const key=String(id);
+  const t=txs.find(x=>String(x.id)===key);
   if(!t)return;
   t.pago=!t.pago;
   saveData(txs);renderAll();
   toast('Status atualizado!','ok');
-  if(!currentUser||typeof id!=='number')return;
+  if(!currentUser||key.startsWith('temp_')||key.startsWith('rec_est_'))return;
   setCloudStatus('syncing','Atualizando...');
   const {error}=await sb.from('transacoes').update({pago:t.pago}).eq('id',id).eq('user_id',currentUser.id);
   setCloudStatus(error?'local':'online',error?'Salvo local':'Nuvem OK');
@@ -2121,7 +2125,7 @@ let _pendingDeleteId = null;
 function deleteTx(id, e){
   e.stopPropagation();
   _pendingDeleteId = id;
-  const t = txs.find(x => x.id === id);
+  const t = txs.find(x => String(x.id) === String(id));
   const msgEl = document.getElementById('confirm-msg');
   if(msgEl && t) msgEl.textContent = `"${t.nome || 'Transação'}" será excluída permanentemente.`;
   document.getElementById('confirm-overlay').classList.add('open');
@@ -2136,10 +2140,11 @@ async function confirmDelete(){
   const id = _pendingDeleteId;
   closeConfirm();
   if(id === null) return;
-  txs = txs.filter(x => x.id !== id);
+  const key=String(id);
+  txs = txs.filter(x => String(x.id) !== key);
   saveData(txs); renderAll();
   toast('Transação excluída', 'ok');
-  if(!currentUser || typeof id !== 'number') return;
+  if(!currentUser || key.startsWith('temp_') || key.startsWith('rec_est_')) return;
   setCloudStatus('syncing','Excluindo...');
   const {error} = await sb.from('transacoes').delete().eq('id', id).eq('user_id', currentUser.id);
   setCloudStatus(error?'local':'online', error?'Salvo local':'Nuvem OK');
@@ -2189,7 +2194,7 @@ function openModal(){
 }
 
 function openEditModal(id){
-  const t = txs.find(x => x.id === id);
+  const t = txs.find(x => String(x.id) === String(id));
   if(!t) return;
   editingTxId = id;
   selectTipo(t.tipo);
