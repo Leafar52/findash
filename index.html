@@ -1365,6 +1365,33 @@ let nextId=Math.max(0,...txs.map(t=>typeof t.id === 'number' ? t.id : 0))+1;
 // =============================================
 const R=(v)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
 
+function median(values){
+  const nums=values.map(v=>parseFloat(v)).filter(v=>!isNaN(v)&&v>0).sort((a,b)=>a-b);
+  if(!nums.length) return 0;
+  const mid=Math.floor(nums.length/2);
+  return nums.length%2?nums[mid]:(nums[mid-1]+nums[mid])/2;
+}
+
+function modeCount(values){
+  const counts=new Map();
+  values.forEach(v=>counts.set(v,(counts.get(v)||0)+1));
+  let best=values[0]||1, bestFreq=0;
+  counts.forEach((freq,value)=>{
+    if(freq>bestFreq||(freq===bestFreq&&value<best)){
+      best=value;
+      bestFreq=freq;
+    }
+  });
+  return best||1;
+}
+
+function typicalRecurringValue(values){
+  const nums=values.map(v=>parseFloat(v)).filter(v=>!isNaN(v)&&v>0).sort((a,b)=>a-b);
+  if(!nums.length) return 0;
+  if(nums.length<=2&&nums[0]>0&&nums[nums.length-1]/nums[0]>=1.35) return nums[0];
+  return median(nums);
+}
+
 function parseDateParts(dateStr){
   if(!dateStr || typeof dateStr !== 'string') {
     const now = new Date();
@@ -1475,6 +1502,26 @@ function hasRealTransactionForRecurringEstimate(candidate,y,m){
     if(recurrenceKeyForTx(t)===candidate.key) return true;
     return recurringNamesLookAlike(t.nome,candidate.nome);
   });
+}
+
+function recurrenceStats(items,decision=null){
+  const monthSet=new Set(items.map(t=>parseDateParts(t.data).m));
+  const months=[...monthSet].sort((a,b)=>a-b);
+  const monthCounts=months.map(month=>items.filter(t=>parseDateParts(t.data).m===month).length);
+  const monthlyTotals=months.map(month=>items
+    .filter(t=>parseDateParts(t.data).m===month)
+    .reduce((sum,t)=>sum+(parseFloat(t.valor)||0),0)
+  ).filter(v=>v>0);
+  const values=items.map(t=>parseFloat(t.valor)||0).filter(v=>v>0);
+  const monthlyAverage=monthlyTotals.reduce((a,b)=>a+b,0)/Math.max(monthlyTotals.length,1);
+  const typicalUnitValue=parseFloat(decision?.unitValue)||typicalRecurringValue(values)||monthlyAverage||0;
+  const typicalMonthlyCount=parseFloat(decision?.multiplier)||modeCount(monthCounts)||1;
+  const projectedMonthlyValue=typicalUnitValue*typicalMonthlyCount;
+  const maxMonthlyDev=monthlyTotals.reduce((mx,v)=>Math.max(mx,Math.abs(v-monthlyAverage)),0);
+  const monthlyDevPct=monthlyAverage?maxMonthlyDev/monthlyAverage:0;
+  const maxUnitDev=values.reduce((mx,v)=>Math.max(mx,Math.abs(v-typicalUnitValue)),0);
+  const unitDevPct=typicalUnitValue?maxUnitDev/typicalUnitValue:0;
+  return {months,monthCounts,monthlyTotals,monthlyAverage,typicalUnitValue,typicalMonthlyCount,projectedMonthlyValue,monthlyDevPct,unitDevPct};
 }
 
 function buildApprovedRecurringEstimatesForPeriod(y,m,annual=false){
@@ -2367,7 +2414,7 @@ function openEstimatedEditModal(encodedId){
   if(!t||!t.estimado) return;
   editingTxId = id;
   const candidate=detectRecurringCandidates().find(c=>c.key===t.recurrenceKey);
-  const baseValue=parseFloat(candidate?.detectedAvgValue)||parseFloat(t.valor)||0;
+  const baseValue=parseFloat(candidate?.unitValue)||parseFloat(candidate?.detectedAvgValue)||parseFloat(t.valor)||0;
   const multiplier=parseFloat(candidate?.multiplier)||1;
   selectTipo(t.tipo);
   selectEnt(t.entidade || 'CPF');
@@ -2502,7 +2549,7 @@ async function salvarTx(){
     const key=estimated.recurrenceKey;
     const day=parseDateParts(data).d;
     const candidate=detectRecurringCandidates().find(c=>c.key===key);
-    const baseValue=parseFloat(candidate?.detectedAvgValue)||parseFloat(estimated.valor)||valor;
+    const baseValue=parseFloat(candidate?.unitValue)||parseFloat(candidate?.detectedAvgValue)||parseFloat(estimated.valor)||valor;
     const multiplier=Math.max(1,Math.round(valor||1));
     const projectedValue=baseValue*multiplier;
     recurrenceDecisions[key]={
@@ -2514,6 +2561,7 @@ async function salvarTx(){
       label:nome||candidate?.nome||estimated.nome,
       year:currentDate.getFullYear(),
       overrideDay:day,
+      unitValue:baseValue,
       multiplier
     };
     saveRecurrenceDecisions();
@@ -2898,16 +2946,12 @@ function detectRecurringCandidates(){
     const monthlyLike=months.length>=3 && gaps.every(g=>g>=1&&g<=2);
     if(!monthlyLike&&!hasDecision) return;
 
-    const monthlyTotals=months.map(month=>items
-      .filter(t=>parseDateParts(t.data).m===month)
-      .reduce((sum,t)=>sum+(parseFloat(t.valor)||0),0)
-    ).filter(v=>v>0);
-    const detectedAvgValue=monthlyTotals.reduce((a,b)=>a+b,0)/Math.max(monthlyTotals.length,1);
-    const maxDev=monthlyTotals.reduce((mx,v)=>Math.max(mx,Math.abs(v-detectedAvgValue)),0);
-    const devPct=detectedAvgValue?maxDev/detectedAvgValue:0;
+    const stats=recurrenceStats(items,decision);
+    const detectedAvgValue=stats.typicalUnitValue;
+    const devPct=stats.unitDevPct;
     const days=items.map(t=>parseDateParts(t.data).d);
     const daySpread=Math.max(...days)-Math.min(...days);
-    const recType=devPct<=0.12?'mensal':'variavel';
+    const recType=stats.unitDevPct<=0.12?'mensal':'variavel';
     const approvedCount=items.filter(t=>t.recorrente==='mensal'||t.recorrente==='variavel').length;
     const rejectedCount=items.filter(t=>t.recorrente==='eventual').length;
     const inferredStatus=approvedCount>=Math.max(2,Math.ceil(items.length*.5))?'approved'
@@ -2917,14 +2961,15 @@ function detectRecurringCandidates(){
     const inferredRecType=approvedCount
       ? ((items.filter(t=>t.recorrente==='variavel').length>items.filter(t=>t.recorrente==='mensal').length)?'variavel':'mensal')
       : recType;
-    const legacyMultiplier=decision?.overrideValue&&detectedAvgValue?parseFloat(decision.overrideValue)/detectedAvgValue:1;
-    const multiplier=parseFloat(decision?.multiplier)||legacyMultiplier||1;
+    const legacyMultiplier=decision?.overrideValue&&detectedAvgValue?parseFloat(decision.overrideValue)/detectedAvgValue:stats.typicalMonthlyCount;
+    const multiplier=parseFloat(decision?.multiplier)||legacyMultiplier||stats.typicalMonthlyCount||1;
     const avgValue=detectedAvgValue*multiplier;
     const confidence=Math.min(96,Math.round(
       34+
       Math.min(months.length,6)*9+
       (avgGap<=1.25?20:10)+
       (devPct<=0.12?18:devPct<=0.35?10:4)+
+      (stats.monthlyDevPct>0.8?-18:stats.monthlyDevPct>0.45?-10:0)+
       (daySpread<=5?10:daySpread<=12?5:0)
     ));
     const first=sorted[0];
@@ -2944,7 +2989,10 @@ function detectRecurringCandidates(){
       monthLabels,
       avgValue,
       detectedAvgValue,
+      unitValue:detectedAvgValue,
       multiplier,
+      monthlyCount:multiplier,
+      rawMonthlyAverage:stats.monthlyAverage,
       overrideDay:decision?.overrideDay||null,
       annualTotal,
       recType:decision?.recType||inferredRecType,
@@ -2972,20 +3020,23 @@ function summarizeRecurrenceGroup(key,items){
   const sorted=[...items].sort((a,b)=>String(a.data).localeCompare(String(b.data)));
   const monthSet=new Set(items.map(t=>parseDateParts(t.data).m));
   const months=[...monthSet].sort((a,b)=>a-b);
-  const monthlyTotals=months.map(month=>items
-    .filter(t=>parseDateParts(t.data).m===month)
-    .reduce((sum,t)=>sum+(parseFloat(t.valor)||0),0)
-  ).filter(v=>v>0);
-  const detectedAvgValue=monthlyTotals.reduce((a,b)=>a+b,0)/Math.max(monthlyTotals.length,1);
-  const maxDev=monthlyTotals.reduce((mx,v)=>Math.max(mx,Math.abs(v-detectedAvgValue)),0);
-  const devPct=detectedAvgValue?maxDev/detectedAvgValue:0;
   const first=sorted[0];
   const decision=recurrenceDecisions[key]||null;
+  const stats=recurrenceStats(items,decision);
+  const detectedAvgValue=stats.typicalUnitValue;
+  const devPct=stats.unitDevPct;
   const recType=decision?.recType||(devPct<=0.12?'mensal':'variavel');
-  const multiplier=parseFloat(decision?.multiplier)||1;
+  const multiplier=parseFloat(decision?.multiplier)||stats.typicalMonthlyCount||1;
   const avgValue=detectedAvgValue*multiplier;
   const cat=CATS[first.categoria]||CATS['outros-sai'];
   const monthLabels=months.map(m=>MONTHS_SHORT[m]).join(', ');
+  const confidence=Math.max(5,Math.min(90,Math.round(
+    22+
+    Math.min(months.length,4)*12+
+    (devPct<=0.12?16:devPct<=0.35?8:0)+
+    (stats.monthlyDevPct>0.8?-24:stats.monthlyDevPct>0.45?-14:0)+
+    (items.length>=3?8:0)
+  )));
   return {
     key,
     nome:decision?.label||first.nome||'Sem descrição',
@@ -2998,10 +3049,14 @@ function summarizeRecurrenceGroup(key,items){
     monthLabels,
     avgValue,
     detectedAvgValue,
+    unitValue:detectedAvgValue,
     multiplier,
+    monthlyCount:multiplier,
+    rawMonthlyAverage:stats.monthlyAverage,
     annualTotal:items.reduce((a,t)=>a+(parseFloat(t.valor)||0),0),
     recType,
-    confidence:Math.min(90,Math.round(35+Math.min(months.length,4)*10+(devPct<=0.12?15:6))),
+    confidence,
+    unstable:months.length<3||stats.monthlyDevPct>0.45,
     status:decision?.status||'search',
     approvedCount:items.filter(t=>t.recorrente==='mensal'||t.recorrente==='variavel').length,
     searchResult:true
@@ -3029,6 +3084,7 @@ function searchTransactionsForRecurrence(search,candidateKeys=new Set()){
   return [...groups.entries()]
     .map(([key,items])=>summarizeRecurrenceGroup(key,items))
     .filter(Boolean)
+    .filter(c=>c.confidence>=70||c.monthsCount>=3||c.approvedCount>0)
     .sort((a,b)=>b.monthsCount-a.monthsCount||b.count-a.count||b.annualTotal-a.annualTotal)
     .slice(0,8);
 }
@@ -3162,6 +3218,8 @@ function renderRecurringReview(){
     const recLabel=c.recType==='mensal'?'Valor fixo':'Valor variável';
     const sign=c.tipo==='entrada'?'+':'-';
     const encoded=encodeURIComponent(c.key);
+    const countLabel=(parseFloat(c.monthlyCount)||1)>1 ? ` · ${R(c.unitValue||c.detectedAvgValue)} x ${c.monthlyCount}/mês` : '';
+    const warnLabel=c.unstable?'<br><span style="color:var(--warning)">Histórico curto ou irregular; confirme antes de marcar.</span>':'';
     const actions=isRejected
       ? `<button class="rec-action-btn neu" onclick="resetDetectedRecurrence('${encoded}')"><i class="fa-solid fa-rotate-left"></i> Revisar novamente</button>`
       : isApproved
@@ -3175,9 +3233,9 @@ function renderRecurringReview(){
           <span class="rec-pill ${statusCls}">${statusLabel}</span>
         </div>
         <div class="rec-detect-meta">
-          <strong>${sign} ${R(c.avgValue)}</strong> média mensal · ${c.count} lançamentos em ${c.monthsCount} meses<br>
+          <strong>${sign} ${R(c.avgValue)}</strong> estimado mensal${countLabel} · ${c.count} lançamentos em ${c.monthsCount} meses<br>
           ${escHtml(c.entidade)} · ${escHtml(c.cat.lbl)} · ${recLabel} · confiança ${c.confidence}%<br>
-          Meses: ${escHtml(c.monthLabels)}
+          Meses: ${escHtml(c.monthLabels)}${warnLabel}
         </div>
         <div class="rec-actions">${actions}</div>
       </div>
