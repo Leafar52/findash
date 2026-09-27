@@ -213,10 +213,15 @@
     .al-val{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;}
 
     /* ── BOTTOM GRID ── */
-    .bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+    .bottom-grid{display:flex;gap:14px;align-items:stretch;}
     .bottom-grid.app-screen{display:none;}
-    .bottom-grid.app-screen.active{display:grid;}
-    @media(max-width:900px){.bottom-grid{grid-template-columns:1fr;}}
+    .bottom-grid.app-screen.active{display:flex;}
+    .bottom-grid .urg-card{flex:1 1 360px;min-width:300px;}
+    .bottom-grid .tx-card{flex:0 0 var(--bottom-tx-width, 62%);min-width:460px;}
+    .bottom-resizer{width:10px;align-self:stretch;cursor:col-resize;border-radius:999px;position:relative;flex:0 0 10px;touch-action:none;}
+    .bottom-resizer::before{content:'';position:absolute;top:18px;bottom:18px;left:50%;width:2px;transform:translateX(-50%);border-radius:999px;background:rgba(255,255,255,.08);transition:var(--t);}
+    .bottom-resizer:hover::before,.bottom-resizer.dragging::before{background:var(--primary);box-shadow:0 0 18px rgba(123,94,255,.45);}
+    @media(max-width:900px){.bottom-grid,.bottom-grid.app-screen.active{display:flex;flex-direction:column;}.bottom-grid .urg-card,.bottom-grid .tx-card{flex:1 1 auto;min-width:0;width:100%;}.bottom-resizer{display:none;}}
 
     /* ── URGENCY / CATEGORY BREAKDOWN ── */
     .urg-card{padding:24px;}
@@ -913,6 +918,8 @@
       </div>
     </div>
 
+    <div class="bottom-resizer" id="bottom-resizer" role="separator" aria-orientation="vertical" aria-label="Redimensionar painel de transações"></div>
+
     <div class="card tx-card">
       <div class="ch" style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
         <div><div class="ch-title">Transações</div><div class="ch-sub" id="tx-count">0 transações</div></div>
@@ -1059,6 +1066,69 @@ function setTxFilter(v){
   renderTx();
 }
 
+function clampBottomTxWidth(width){
+  const grid=document.getElementById('dashboard-bottom-screen');
+  if(!grid) return width;
+  const total=grid.getBoundingClientRect().width;
+  if(!total) return width;
+  const minRight=Math.min(520,total*.72);
+  const minLeft=Math.min(320,total*.45);
+  const maxRight=Math.max(minRight,total-minLeft-24);
+  return Math.max(minRight,Math.min(maxRight,width));
+}
+
+function setBottomTxWidth(width,save=false){
+  const grid=document.getElementById('dashboard-bottom-screen');
+  if(!grid) return;
+  const clamped=clampBottomTxWidth(width);
+  grid.style.setProperty('--bottom-tx-width', `${Math.round(clamped)}px`);
+  if(save){
+    try{localStorage.setItem(BOTTOM_TX_WIDTH_KEY,String(Math.round(clamped)));}catch(e){}
+  }
+}
+
+function restoreBottomTxWidth(){
+  const grid=document.getElementById('dashboard-bottom-screen');
+  if(!grid||window.matchMedia('(max-width: 900px)').matches) return;
+  let saved=0;
+  try{saved=parseFloat(localStorage.getItem(BOTTOM_TX_WIDTH_KEY)||'0')||0;}catch(e){}
+  const total=grid.getBoundingClientRect().width;
+  setBottomTxWidth(saved||total*.62,false);
+}
+
+function initBottomResizer(){
+  const grid=document.getElementById('dashboard-bottom-screen');
+  const handle=document.getElementById('bottom-resizer');
+  if(!grid||!handle||handle.dataset.bound==='1') return;
+  handle.dataset.bound='1';
+  restoreBottomTxWidth();
+  const move=(e)=>{
+    if(!handle.classList.contains('dragging')) return;
+    const clientX=e.touches?e.touches[0].clientX:e.clientX;
+    const rect=grid.getBoundingClientRect();
+    setBottomTxWidth(rect.right-clientX-14,true);
+    e.preventDefault();
+  };
+  const stop=()=>{
+    handle.classList.remove('dragging');
+    window.removeEventListener('mousemove',move);
+    window.removeEventListener('mouseup',stop);
+    window.removeEventListener('touchmove',move);
+    window.removeEventListener('touchend',stop);
+  };
+  const start=(e)=>{
+    if(window.matchMedia('(max-width: 900px)').matches) return;
+    handle.classList.add('dragging');
+    window.addEventListener('mousemove',move);
+    window.addEventListener('mouseup',stop);
+    window.addEventListener('touchmove',move,{passive:false});
+    window.addEventListener('touchend',stop);
+    e.preventDefault();
+  };
+  handle.addEventListener('mousedown',start);
+  handle.addEventListener('touchstart',start,{passive:false});
+}
+
 function setCatFilter(catKey){
   if(catFilter === catKey){ catFilter = null; }
   else { catFilter = catKey; txTypeFilter = 'saida'; }
@@ -1147,6 +1217,7 @@ const LEGACY_DATA_STORAGE_KEY = 'findash_v3';
 const OLDER_DATA_STORAGE_KEY = 'findash_v2';
 const RECURRENCE_DECISIONS_KEY = 'findash_v4_recorrencias';
 const LEGACY_RECURRENCE_DECISIONS_KEY = 'findash_v3_recorrencias';
+const BOTTOM_TX_WIDTH_KEY = 'findash_v4_bottom_tx_width';
 
 function loadData(){
   try{
@@ -3314,6 +3385,7 @@ function renderAll(){
 // =============================================
 async function checkAuthAndInit(){
   updatePeriodLabel();
+  initBottomResizer();
   renderAll();
   
   try {
@@ -3356,7 +3428,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='i'&&!e.ctrlKey&&!e.metaKey)openImport();
   if(e.key==='Escape'){closeModal();closeImport();}
 });
-let _rsz;window.addEventListener('resize',()=>{clearTimeout(_rsz);_rsz=setTimeout(renderCashflow,160);});
+let _rsz;window.addEventListener('resize',()=>{clearTimeout(_rsz);_rsz=setTimeout(()=>{restoreBottomTxWidth();renderCashflow();},160);});
 </script>
 </body>
 </html>
