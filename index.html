@@ -83,7 +83,7 @@
 
     /* ── TOPBAR ── */
     .topbar{display:flex;align-items:center;justify-content:space-between;padding:20px 0 16px;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:200;background:linear-gradient(to bottom,var(--bg) 72%,transparent);}
-    .logo{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+    .logo{display:flex;align-items:center;gap:12px;flex-shrink:0;cursor:pointer;}
     .logo-icon{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,var(--primary),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 0 24px rgba(123,94,255,.45);position:relative;overflow:hidden;}
     .logo-icon::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.15),transparent);}
     .logo-wordmark{display:flex;flex-direction:column;gap:2px;}
@@ -712,7 +712,7 @@
 <!-- APP -->
 <div id="app">
   <header class="topbar">
-    <div class="logo">
+    <div class="logo" onclick="openDashboardScreen()" title="Voltar para a home">
       <div class="logo-icon">💸</div>
       <div class="logo-wordmark">
         <span class="logo-text">FinDash</span>
@@ -1425,7 +1425,7 @@ function buildApprovedRecurringEstimatesForPeriod(y,m,annual=false){
     if(!realItems.length) return;
     const months=[...new Set(realItems.map(t=>parseDateParts(t.data).m))].sort((a,b)=>a-b);
     const latestMonth=Math.max(...months);
-    const avgDay=Math.round(realItems.reduce((sum,t)=>sum+parseDateParts(t.data).d,0)/realItems.length)||1;
+    const avgDay=c.overrideDay||Math.round(realItems.reduce((sum,t)=>sum+parseDateParts(t.data).d,0)/realItems.length)||1;
     const monthsToCheck=annual ? Array.from({length:12-latestMonth-1},(_,i)=>latestMonth+1+i) : [m];
     monthsToCheck.forEach(targetMonth=>{
       if(targetMonth<=latestMonth || months.includes(targetMonth)) return;
@@ -2022,7 +2022,8 @@ function renderTx(){
     const estimateBadge=isEstimated?'<span class="tx-est-chip"><i class="fa-solid fa-wand-magic-sparkles"></i> Previsto</span>':'';
     const cbHtml=isEstimated?'<input type="checkbox" class="tx-cb" disabled title="Previsão recorrente">' : `<input type="checkbox" class="tx-cb" ${isSelected?'checked':''} onchange="toggleSelectTx(${t.id},event)">`;
     const actionsHtml=isEstimated
-      ? '<div class="tx-status pendente" title="Previsto por recorrência aprovada"></div>'
+      ? `<div class="tx-status pendente" title="Previsto por recorrência aprovada"></div>
+          <button class="tx-edit" onclick="openEstimatedEditModal('${encodeURIComponent(t.id)}')" title="Editar previsão"><i class="fa-solid fa-pen"></i></button>`
       : `<div class="tx-status ${t.pago?'pago':'pendente'}" title="${t.pago?(t.tipo==='entrada'?'Recebido':'Pago'):'Pendente'}" onclick="togglePago(${t.id},event)" style="cursor:pointer"></div>
           <button class="tx-edit" onclick="openEditModal(${t.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
           <button class="tx-del" onclick="deleteTx(${t.id},event)"><i class="fa-solid fa-trash"></i></button>`;
@@ -2208,6 +2209,27 @@ function openEditModal(id){
   document.getElementById('modal-overlay').classList.add('open');
 }
 
+function openEstimatedEditModal(encodedId){
+  const id=decodeURIComponent(encodedId);
+  const t=getFiltered().find(x=>String(x.id)===String(id));
+  if(!t||!t.estimado) return;
+  editingTxId = id;
+  selectTipo(t.tipo);
+  selectEnt(t.entidade || 'CPF');
+  document.getElementById('f-nome').value = t.nome || '';
+  document.getElementById('f-valor').value = t.valor || '';
+  document.getElementById('f-data').value = t.data || '';
+  document.getElementById('f-cat').value = t.categoria || '';
+  document.getElementById('f-rec').value = t.recorrente || 'mensal';
+  document.getElementById('f-pago').checked = false;
+  document.getElementById('f-parcelado').checked = false;
+  document.getElementById('parcela-row').style.display = 'none';
+  document.getElementById('parcelado-check-row').style.display = 'none';
+  document.getElementById('modal-title').textContent = 'Editar Previsão Recorrente';
+  document.getElementById('modal-save-btn').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Salvar Previsão';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
 function toggleParcelado(){
   const checked = document.getElementById('f-parcelado').checked;
   document.getElementById('parcela-row').style.display = checked ? '' : 'none';
@@ -2296,6 +2318,37 @@ async function salvarTx(){
   if(!currentUser){
     const { data: { session } } = await sb.auth.getSession();
     if(session?.user) currentUser = session.user;
+  }
+
+  if(typeof editingTxId === 'string' && editingTxId.startsWith('rec_est_')){
+    const estimated=getFiltered().find(t=>String(t.id)===editingTxId);
+    if(!estimated||!estimated.recurrenceKey){
+      toast('Previsão recorrente não encontrada.', 'err');
+      closeModal();
+      return;
+    }
+    const key=estimated.recurrenceKey;
+    const day=parseDateParts(data).d;
+    const candidate=detectRecurringCandidates().find(c=>c.key===key);
+    const baseValue=parseFloat(candidate?.detectedAvgValue)||parseFloat(estimated.valor)||valor;
+    const multiplier=baseValue?valor/baseValue:1;
+    recurrenceDecisions[key]={
+      ...(recurrenceDecisions[key]||{}),
+      status:'approved',
+      recType:estimated.recorrente||candidate?.recType||'mensal',
+      decidedAt:recurrenceDecisions[key]?.decidedAt||new Date().toISOString(),
+      updatedAt:new Date().toISOString(),
+      label:nome||candidate?.nome||estimated.nome,
+      year:currentDate.getFullYear(),
+      overrideValue:valor,
+      overrideDay:day,
+      multiplier:Number.isFinite(multiplier)?multiplier:1
+    };
+    saveRecurrenceDecisions();
+    closeModal();
+    renderAll();
+    toast(`Previsão atualizada para ${R(valor)}${multiplier>1.15?` (${multiplier.toFixed(1).replace('.',',')}x a média)` : ''}.`, 'ok');
+    return;
   }
 
   if(editingTxId === null){
@@ -2628,14 +2681,27 @@ function detectRecurringCandidates(){
     const monthlyLike=months.length>=3 && gaps.every(g=>g>=1&&g<=2);
     if(!monthlyLike) return;
 
-    const values=items.map(t=>parseFloat(t.valor)||0).filter(v=>v>0);
-    const avgValue=values.reduce((a,b)=>a+b,0)/Math.max(values.length,1);
-    const maxDev=values.reduce((mx,v)=>Math.max(mx,Math.abs(v-avgValue)),0);
-    const devPct=avgValue?maxDev/avgValue:0;
+    const monthlyTotals=months.map(month=>items
+      .filter(t=>parseDateParts(t.data).m===month)
+      .reduce((sum,t)=>sum+(parseFloat(t.valor)||0),0)
+    ).filter(v=>v>0);
+    const detectedAvgValue=monthlyTotals.reduce((a,b)=>a+b,0)/Math.max(monthlyTotals.length,1);
+    const maxDev=monthlyTotals.reduce((mx,v)=>Math.max(mx,Math.abs(v-detectedAvgValue)),0);
+    const devPct=detectedAvgValue?maxDev/detectedAvgValue:0;
     const days=items.map(t=>parseDateParts(t.data).d);
     const daySpread=Math.max(...days)-Math.min(...days);
     const recType=devPct<=0.12?'mensal':'variavel';
     const decision=recurrenceDecisions[key]||null;
+    const approvedCount=items.filter(t=>t.recorrente==='mensal'||t.recorrente==='variavel').length;
+    const rejectedCount=items.filter(t=>t.recorrente==='eventual').length;
+    const inferredStatus=approvedCount>=Math.max(2,Math.ceil(items.length*.5))?'approved'
+      :rejectedCount>=Math.max(2,Math.ceil(items.length*.5))?'rejected'
+      :'pending';
+    const status=decision?.status||inferredStatus;
+    const inferredRecType=approvedCount
+      ? ((items.filter(t=>t.recorrente==='variavel').length>items.filter(t=>t.recorrente==='mensal').length)?'variavel':'mensal')
+      : recType;
+    const avgValue=parseFloat(decision?.overrideValue)||detectedAvgValue;
     const confidence=Math.min(96,Math.round(
       34+
       Math.min(months.length,6)*9+
@@ -2647,11 +2713,10 @@ function detectRecurringCandidates(){
     const cat=CATS[first.categoria]||CATS['outros-sai'];
     const monthLabels=months.map(m=>MONTHS_SHORT[m]).join(', ');
     const annualTotal=items.reduce((a,t)=>a+(parseFloat(t.valor)||0),0);
-    const approvedCount=items.filter(t=>t.recorrente==='mensal'||t.recorrente==='variavel').length;
 
     candidates.push({
       key,
-      nome:first.nome||'Sem descrição',
+      nome:decision?.label||first.nome||'Sem descrição',
       tipo:first.tipo,
       entidade:first.entidade||'CPF',
       categoria:first.categoria,
@@ -2660,11 +2725,14 @@ function detectRecurringCandidates(){
       monthsCount:months.length,
       monthLabels,
       avgValue,
+      detectedAvgValue,
+      overrideValue:decision?.overrideValue||null,
+      overrideDay:decision?.overrideDay||null,
       annualTotal,
-      recType:decision?.recType||recType,
+      recType:decision?.recType||inferredRecType,
       confidence,
       daySpread,
-      status:decision?.status||'pending',
+      status,
       approvedCount
     });
   });
@@ -2731,18 +2799,20 @@ async function rejectDetectedRecurrence(encodedKey){
     year:currentDate.getFullYear()
   };
   saveRecurrenceDecisions();
-  const changed=markRecurrenceForKey(key,'unica');
+  const changed=markRecurrenceForKey(key,'eventual');
   saveData(txs);renderAll();
   toast('Padrão descartado para este ano.', 'ok');
   await syncRecurrenceChanges(changed,'Removendo recorrência...');
 }
 
-function resetDetectedRecurrence(encodedKey){
+async function resetDetectedRecurrence(encodedKey){
   const key=decodeURIComponent(encodedKey);
   delete recurrenceDecisions[key];
   saveRecurrenceDecisions();
-  renderAll();
+  const changed=markRecurrenceForKey(key,'unica');
+  saveData(txs);renderAll();
   toast('Padrão voltou para revisão.', 'ok');
+  await syncRecurrenceChanges(changed,'Reabrindo revisão...');
 }
 
 function setRecReviewFilter(v){
