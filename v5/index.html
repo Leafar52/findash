@@ -1634,10 +1634,12 @@ function cleanInstallmentName(nome){
 
 function isSubscriptionLike(t){
   if(!t||t.tipo!=='saida') return false;
+  if(extractInstallmentInfo(t.nome)) return false;
   if(t.recorrente==='mensal'||t.recorrente==='variavel'||t.estimado) return true;
   const name=normalizeRecurringName(t.nome);
-  const hay=`${name} ${t.categoria||''}`;
-  return /\b(netflix|spotify|livelo|prime|amazon|disney|max|hbo|youtube|google|apple|icloud|microsoft|adobe|canva|notion|openai|chatgpt|capcut|dropbox|github|figma|linkedin|uber\s*one|ifood|assinatura|mensalidade|plano|premium|saas|software|app)\b/.test(hay);
+  const hay=`${name} ${t.categoria||''}`.toLowerCase();
+  if(['digital','contador','educacao'].includes(t.categoria)) return true;
+  return /\b(netflix|spotify|livelo|prime|amazon|disney|star|paramount|globoplay|max|hbo|youtube|google|apple|icloud|microsoft|office|adobe|canva|notion|openai|chatgpt|claude|gemini|capcut|dropbox|github|figma|linkedin|uber\s*one|ifood|club|clube|assinatura|mensalidade|plano|premium|pro|plus|saas|software|aplicativo|app|servico|servicos|streaming|storage|armazenamento|host|hosting|dominio|internet|cloud)\b/.test(hay);
 }
 
 function getPeriodRange(){
@@ -2310,16 +2312,13 @@ function renderCommitments(){
   if(viewMode==='anual'){wrap.style.display='none';return;}
   wrap.style.display='grid';
   const f=getFiltered().filter(t=>t&&t.tipo==='saida');
-  const installments=f
+  const installmentsAll=f
     .map(t=>({...t,installment:extractInstallmentInfo(t.nome)}))
     .filter(t=>t.installment)
-    .sort((a,b)=>daysUntil(a.data)-daysUntil(b.data))
-    .slice(0,6);
-  const installmentIds=new Set(installments.map(t=>String(t.id)));
+    .sort((a,b)=>daysUntil(a.data)-daysUntil(b.data));
   const subscriptions=f
-    .filter(t=>!installmentIds.has(String(t.id))&&isSubscriptionLike(t))
-    .sort((a,b)=>daysUntil(a.data)-daysUntil(b.data))
-    .slice(0,6);
+    .filter(t=>!extractInstallmentInfo(t.nome)&&isSubscriptionLike(t))
+    .sort((a,b)=>daysUntil(a.data)-daysUntil(b.data));
   const renderList=(items,type)=>{
     if(!items.length){
       return `<div class="commit-empty">${type==='installment'?'Nenhuma parcela identificada neste mês.':'Nenhuma mensalidade identificada neste mês.'}</div>`;
@@ -2342,6 +2341,7 @@ function renderCommitments(){
       </div>`;
     }).join('');
   };
+  const installments=installmentsAll;
   const installmentTotal=installments.reduce((s,t)=>s+(parseFloat(t.valor)||0),0);
   const subscriptionTotal=subscriptions.reduce((s,t)=>s+(parseFloat(t.valor)||0),0);
   const instTotalEl=document.getElementById('installments-total');
